@@ -20,16 +20,25 @@ pub fn init(app: &AppHandle) -> anyhow::Result<()> {
             if let Some(window) = app.get_webview_window("main") {
                 match event.id.as_ref() {
                     "show" => {
-                        let _ = window.show();
-                        let _ = window.set_focus();
+                        let _ = crate::desktop_window::show_main_window(app);
                     }
                     "hide" => {
-                        let _ = window.hide();
+                        let _ = crate::desktop_window::hide_main_window(app);
                     }
                     "pin" => {
-                        let next = !window.is_always_on_top().unwrap_or(false);
-                        let _ = window.set_always_on_top(next);
-                        let _ = window.show();
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let mode = if crate::desktop_window::is_pinned(&app) {
+                                "normal"
+                            } else {
+                                "pinned"
+                            };
+                            if let Err(error) =
+                                crate::desktop_window::set_main_window_mode(&app, mode).await
+                            {
+                                eprintln!("[desktop] tray mode change failed: {error}");
+                            }
+                        });
                     }
                     "sync" => {
                         let app = app.clone();
@@ -43,8 +52,9 @@ pub fn init(app: &AppHandle) -> anyhow::Result<()> {
                         });
                     }
                     "settings" => {
-                        let _ = window.show();
+                        let _ = crate::desktop_window::show_main_window(app);
                         let _ = window.set_focus();
+                        let _ = crate::desktop_window::enforce_main_window_z_order(app);
                     }
                     "quit" => app.exit(0),
                     _ => {}
@@ -60,10 +70,9 @@ pub fn init(app: &AppHandle) -> anyhow::Result<()> {
             {
                 if let Some(window) = tray.app_handle().get_webview_window("main") {
                     if window.is_visible().unwrap_or(false) {
-                        let _ = window.hide();
+                        let _ = crate::desktop_window::hide_main_window(tray.app_handle());
                     } else {
-                        let _ = window.show();
-                        let _ = window.set_focus();
+                        let _ = crate::desktop_window::show_main_window(tray.app_handle());
                     }
                 }
             }

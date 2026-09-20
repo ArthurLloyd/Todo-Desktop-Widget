@@ -3,6 +3,7 @@ mod commands;
 mod config;
 mod db;
 mod debug_console;
+mod desktop_window;
 mod graph;
 mod hotkey;
 mod models;
@@ -66,9 +67,27 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let state = AppState::new(app)?;
+            let restore_pinned = {
+                let conn = state
+                    .db
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("database lock poisoned during startup"))?;
+                db::load_settings(&conn)?.always_on_top
+            };
             app.manage(state);
+            app.manage(desktop_window::DesktopWindowState::default());
             tray::init(app.handle())?;
             hotkey::init(app.handle())?;
+            if restore_pinned {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) =
+                        desktop_window::set_main_window_mode(&app_handle, "pinned").await
+                    {
+                        eprintln!("[desktop] failed to restore pinned mode at startup: {error}");
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

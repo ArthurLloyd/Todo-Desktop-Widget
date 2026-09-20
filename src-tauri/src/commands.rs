@@ -364,28 +364,8 @@ pub async fn open_task_details(app: AppHandle, task_id: String) -> Result<(), St
 }
 
 #[tauri::command]
-pub fn set_window_mode(app: AppHandle, mode: String) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
-
-    match mode.as_str() {
-        "pinned" => {
-            window.show().map_err(to_string)?;
-            window.set_always_on_top(true).map_err(to_string)?;
-            window.set_focus().map_err(to_string)?;
-        }
-        "hidden" => {
-            window.hide().map_err(to_string)?;
-        }
-        _ => {
-            window.show().map_err(to_string)?;
-            window.set_always_on_top(false).map_err(to_string)?;
-            window.set_focus().map_err(to_string)?;
-        }
-    }
-
-    Ok(())
+pub async fn set_window_mode(app: AppHandle, mode: String) -> Result<(), String> {
+    crate::desktop_window::set_main_window_mode(&app, &mode).await
 }
 
 #[tauri::command]
