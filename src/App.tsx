@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { api } from "./lib/api";
@@ -23,6 +23,8 @@ import { WidgetShell } from "./components/WidgetShell";
 import { TitleBar } from "./components/TitleBar";
 import { FooterStatus } from "./components/FooterStatus";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { ThemeManager } from "./components/ThemeManager";
+import { WidgetManager } from "./components/WidgetManager";
 import { QuickAddOverlay } from "./components/QuickAddOverlay";
 import { TaskDetailsPanel } from "./components/TaskDetailsPanel";
 import { WidgetContextMenu } from "./components/WidgetContextMenu";
@@ -36,6 +38,8 @@ import {
   resolveWidgetTheme,
   themeToCssVariables,
 } from "./lib/themeRuntime";
+import { deriveManagementTheme } from "./lib/managementTheme";
+import { reduceWidgetView } from "./lib/widgetView";
 
 const defaultStatus: SyncStatus = { state: "idle" };
 const defaultSettings: Settings = {
@@ -87,7 +91,7 @@ function WidgetApp() {
   const widgetInstanceIdRef = useRef<string | null>(null);
   const [widgetInstances, setWidgetInstances] = useState<WidgetInstance[]>([]);
   const [widgetConfigError, setWidgetConfigError] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [view, dispatchView] = useReducer(reduceWidgetView, "widget");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [loginNotice, setLoginNotice] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>(() => readSortMode());
@@ -107,6 +111,10 @@ function WidgetApp() {
   const widgetThemeStyle = useMemo(
     () => widgetTheme ? themeToCssVariables(widgetTheme.config, settings.opacity) : undefined,
     [settings.opacity, widgetTheme],
+  );
+  const managementThemeStyle = useMemo(
+    () => deriveManagementTheme(widgetTheme?.config),
+    [widgetTheme],
   );
 
   const refreshTaskData = useCallback(async () => {
@@ -135,7 +143,9 @@ function WidgetApp() {
   }, []);
 
   const reloadWidgetInstances = useCallback(async () => {
-    setWidgetInstances(await api.listWidgetInstances());
+    const nextInstances = await api.listWidgetInstances();
+    setWidgetInstances(nextInstances);
+    return nextInstances;
   }, []);
 
   useEffect(() => {
@@ -146,6 +156,7 @@ function WidgetApp() {
     let unlisten: (() => void) | undefined;
     let unlistenConfig: (() => void) | undefined;
     let unlistenThemes: (() => void) | undefined;
+    let unlistenOpenSettings: (() => void) | undefined;
     void listen("local-tasks-changed", () => void refreshTaskData()).then((nextUnlisten) => {
       unlisten = nextUnlisten;
     });
@@ -162,14 +173,22 @@ function WidgetApp() {
     }).then((nextUnlisten) => {
       unlistenThemes = nextUnlisten;
     });
+    void listen("open-settings", () => {
+      setContextMenu((current) => ({ ...current, open: false }));
+      dispatchView({ type: "open-settings" });
+    }).then((nextUnlisten) => {
+      unlistenOpenSettings = nextUnlisten;
+    });
     return () => {
       unlisten?.();
       unlistenConfig?.();
       unlistenThemes?.();
+      unlistenOpenSettings?.();
     };
   }, [refreshTaskData, reloadWidgetContext, reloadWidgetInstances]);
 
   useEffect(() => {
+    if (view !== "widget") return;
     function onKeyDown(event: KeyboardEvent) {
       const quickAddShortcut = (event.ctrlKey && event.altKey) || (event.metaKey && event.altKey);
       if (quickAddShortcut && event.key.toLowerCase() === "t") {
@@ -180,9 +199,10 @@ function WidgetApp() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [view]);
 
   useEffect(() => {
+    if (view !== "widget") return;
     function onContextMenu(event: MouseEvent) {
       event.preventDefault();
       const menuWidth = 166;
@@ -206,7 +226,7 @@ function WidgetApp() {
       window.removeEventListener("contextmenu", onContextMenu);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     if (!loginNotice || auth.loggedIn) return;
@@ -314,30 +334,6 @@ function WidgetApp() {
     }
   }
 
-  async function handleCreateWidget() {
-    const initialListId =
-      widgetContext?.panes.find(
-        (pane) => pane.listId && taskLists.some((list) => list.id === pane.listId),
-      )?.listId || null;
-    await api.createWidgetWindow(initialListId);
-    await reloadWidgetInstances();
-  }
-
-  async function handleOpenWidget(instanceId: string) {
-    await api.openWidgetWindow(instanceId);
-    await reloadWidgetInstances();
-  }
-
-  async function handleAddPane() {
-    setWidgetConfigError(null);
-    try {
-      await api.createCurrentWidgetPane(null);
-      await reloadWidgetContext();
-    } catch (error) {
-      setWidgetConfigError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
   async function handleDeletePane(paneId: string) {
     setWidgetConfigError(null);
     try {
@@ -358,31 +354,10 @@ function WidgetApp() {
     }
   }
 
-  async function handleWidgetRename(name: string) {
-    if (!name.trim() || name.trim() === widgetContext?.instance.name) return;
-    setWidgetConfigError(null);
-    try {
-      await api.updateCurrentWidgetName(name.trim());
-      await Promise.all([reloadWidgetContext(), reloadWidgetInstances()]);
-    } catch (error) {
-      setWidgetConfigError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
   async function handleWidgetThemeChange(themeId: string) {
     setWidgetConfigError(null);
     try {
       await api.setCurrentWidgetTheme(themeId);
-      await reloadWidgetContext();
-    } catch (error) {
-      setWidgetConfigError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function handlePaneThemeChange(paneId: string, themeId: string | null) {
-    setWidgetConfigError(null);
-    try {
-      await api.setCurrentWidgetPaneTheme(paneId, themeId);
       await reloadWidgetContext();
     } catch (error) {
       setWidgetConfigError(error instanceof Error ? error.message : String(error));
@@ -410,6 +385,11 @@ function WidgetApp() {
     await api.setWindowMode("hidden");
   }
 
+  function openSettings() {
+    setContextMenu((current) => ({ ...current, open: false }));
+    dispatchView({ type: "open-settings" });
+  }
+
   return (
     <I18nProvider language={settings.language}>
       <WidgetShell
@@ -418,6 +398,8 @@ function WidgetApp() {
         fontScale={settings.fontScale}
         themeStyle={widgetThemeStyle}
       >
+        {view === "widget" ? (
+          <>
         <TitleBar
           isPinned={widgetContext?.instance.pinned || false}
           widgetName={widgetContext?.instance.name || "Todo"}
@@ -430,7 +412,7 @@ function WidgetApp() {
           }}
           onRefresh={handleSync}
           onTogglePinned={() => void handleTogglePinned()}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={openSettings}
         />
 
         {widgetContext && (
@@ -470,50 +452,68 @@ function WidgetApp() {
         )}
         <FooterStatus inboxCount={inboxCount} syncStatus={syncStatus} />
 
-      <SettingsPanel
-        open={settingsOpen}
+        <WidgetContextMenu
+          open={contextMenu.open}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          isPinned={widgetContext?.instance.pinned || false}
+          onClose={() => setContextMenu((current) => ({ ...current, open: false }))}
+          onRefresh={() => void handleSync()}
+          onTogglePinned={() => void handleTogglePinned()}
+          onOpenSettings={openSettings}
+          onHide={() => void hideWindow()}
+        />
+
+        <QuickAddOverlay open={quickAddOpen} onAdd={handleQuickAdd} onClose={() => setQuickAddOpen(false)} />
+          </>
+        ) : null}
+
+      {view === "settings" ? <SettingsPanel
+        managementThemeStyle={managementThemeStyle}
         auth={auth}
         settings={settings}
         loginNotice={loginNotice}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => dispatchView({ type: "close" })}
         onLogin={() => void handleLogin()}
         onLogout={() => void api.logout().then(() => refreshTaskData())}
         onChange={(next) => void handleSettingsChange(next)}
         onEnsureLists={() => void handleSync()}
-        widgetInstances={widgetInstances}
-        currentWidgetId={widgetContext?.instance.id || null}
-        onCreateWidget={() => void handleCreateWidget()}
-        onOpenWidget={(instanceId) => void handleOpenWidget(instanceId)}
-        onCloseWidget={widgetContext?.instance.isPrimary ? undefined : () => void api.closeCurrentWidgetWindow()}
         currentWidget={widgetContext}
-        taskLists={taskLists}
         widgetThemes={widgetThemes}
         configError={widgetConfigError}
-        onRenameWidget={(name) => void handleWidgetRename(name)}
+        onTogglePinned={() => void handleTogglePinned()}
         onChangeLayout={(layoutMode) => void handleLayoutChange(layoutMode)}
         onChangeWidgetTheme={(themeId) => void handleWidgetThemeChange(themeId)}
-        onCreateTheme={handleCreateTheme}
-        onUpdateTheme={handleUpdateTheme}
-        onDeleteTheme={handleDeleteTheme}
-        onAddPane={() => void handleAddPane()}
-        onSelectPaneList={(paneId, listId) => void handleSelectPaneList(paneId, listId)}
-        onChangePaneTheme={(paneId, themeId) => void handlePaneThemeChange(paneId, themeId)}
-        onDeletePane={(paneId) => void handleDeletePane(paneId)}
-      />
+        onOpenWidgetManager={() => dispatchView({ type: "open-widget-manager" })}
+        onOpenThemeManager={() => dispatchView({ type: "open-theme-manager" })}
+      /> : null}
 
-      <WidgetContextMenu
-        open={contextMenu.open}
-        x={contextMenu.x}
-        y={contextMenu.y}
-        isPinned={widgetContext?.instance.pinned || false}
-        onClose={() => setContextMenu((current) => ({ ...current, open: false }))}
-        onRefresh={() => void handleSync()}
-        onTogglePinned={() => void handleTogglePinned()}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onHide={() => void hideWindow()}
-      />
+      {view === "widget-manager" ? (
+        <WidgetManager
+          managementThemeStyle={managementThemeStyle}
+          instances={widgetInstances}
+          currentWidgetId={widgetContext?.instance.id || null}
+          taskLists={taskLists}
+          themes={widgetThemes}
+          onBack={() => dispatchView({ type: "back" })}
+          onClose={() => dispatchView({ type: "close" })}
+          onRefreshInstances={reloadWidgetInstances}
+          onManageThemes={() => dispatchView({ type: "open-theme-manager" })}
+        />
+      ) : null}
 
-        <QuickAddOverlay open={quickAddOpen} onAdd={handleQuickAdd} onClose={() => setQuickAddOpen(false)} />
+      {view === "theme-manager" ? (
+        <ThemeManager
+          managementThemeStyle={managementThemeStyle}
+          themes={widgetThemes}
+          windowOpacity={settings.opacity}
+          onBack={() => dispatchView({ type: "back" })}
+          onClose={() => dispatchView({ type: "close" })}
+          onCreate={handleCreateTheme}
+          onUpdate={handleUpdateTheme}
+          onDelete={handleDeleteTheme}
+        />
+      ) : null}
       </WidgetShell>
     </I18nProvider>
   );

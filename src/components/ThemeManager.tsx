@@ -1,6 +1,7 @@
-import { Copy, Plus, X } from "lucide-react";
+import { Copy, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "../lib/i18n";
+import type { ManagementThemeCssVariables } from "../lib/managementTheme";
 import {
   cloneThemeDraft,
   draftFromTheme,
@@ -12,10 +13,13 @@ import {
 } from "../lib/themeEditor";
 import type { WidgetTheme, WidgetThemeInput } from "../lib/types";
 import { ThemeEditor } from "./ThemeEditor";
+import { ManagementShell } from "./ManagementShell";
 
 type Props = {
+  managementThemeStyle: ManagementThemeCssVariables;
   themes: WidgetTheme[];
   windowOpacity: number;
+  onBack: () => void;
   onClose: () => void;
   onCreate: (input: WidgetThemeInput) => Promise<WidgetTheme>;
   onUpdate: (id: string, input: WidgetThemeInput) => Promise<WidgetTheme>;
@@ -23,12 +27,22 @@ type Props = {
 };
 
 type PendingAction =
+  | { kind: "back" }
   | { kind: "close" }
   | { kind: "select"; themeId: string }
   | { kind: "new" }
   | { kind: "duplicate" };
 
-export function ThemeManager({ themes, windowOpacity, onClose, onCreate, onUpdate, onDelete }: Props) {
+export function ThemeManager({
+  managementThemeStyle,
+  themes,
+  windowOpacity,
+  onBack,
+  onClose,
+  onCreate,
+  onUpdate,
+  onDelete,
+}: Props) {
   const { t } = useI18n();
   const firstTheme = themes.find((theme) => theme.id === "default") ?? themes[0];
   const [selectedId, setSelectedId] = useState<string | null>(firstTheme?.id ?? null);
@@ -63,6 +77,24 @@ export function ThemeManager({ themes, windowOpacity, onClose, onCreate, onUpdat
     setInitial(cloneThemeDraft(nextDraft));
   }, [dirty, isNew, selectedId, themes]);
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      if (deletePending) {
+        setDeletePending(false);
+        return;
+      }
+      if (pendingAction) {
+        setPendingAction(null);
+        return;
+      }
+      requestAction({ kind: "back" });
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [deletePending, dirty, pendingAction]);
+
   function requestAction(action: PendingAction) {
     if (dirty) setPendingAction(action);
     else performAction(action);
@@ -71,6 +103,10 @@ export function ThemeManager({ themes, windowOpacity, onClose, onCreate, onUpdat
   function performAction(action: PendingAction) {
     setPendingAction(null);
     setSaveError(null);
+    if (action.kind === "back") {
+      onBack();
+      return;
+    }
     if (action.kind === "close") {
       onClose();
       return;
@@ -176,24 +212,15 @@ export function ThemeManager({ themes, windowOpacity, onClose, onCreate, onUpdat
   }
 
   return (
-    <div className="theme-manager" role="dialog" aria-modal="true" aria-label={t("themeEditor.managerTitle")}>
-      <header className="theme-manager__header">
-        <div>
-          <strong>{t("themeEditor.managerTitle")}</strong>
-          <span>{t("themeEditor.managerHint")}</span>
-        </div>
-        <button
-          className="icon-button"
-          type="button"
-          title={t("common.close")}
-          aria-label={t("common.close")}
-          onClick={() => requestAction({ kind: "close" })}
-        >
-          <X size={16} />
-        </button>
-      </header>
-
-      <div className="theme-manager__body">
+    <ManagementShell
+      title={t("themeEditor.managerTitle")}
+      hint={t("themeEditor.managerHint")}
+      themeStyle={managementThemeStyle}
+      onBack={() => requestAction({ kind: "back" })}
+      onClose={() => requestAction({ kind: "close" })}
+    >
+      <div className="theme-manager">
+        <div className="theme-manager__body">
         <aside className="theme-library">
           <button className="text-button" type="button" onClick={() => requestAction({ kind: "new" })}>
             <Plus size={15} />
@@ -234,7 +261,7 @@ export function ThemeManager({ themes, windowOpacity, onClose, onCreate, onUpdat
           onDuplicate={() => requestAction({ kind: "duplicate" })}
           onDelete={() => setDeletePending(true)}
         />
-      </div>
+        </div>
 
       {pendingAction ? (
         <Confirmation
@@ -255,7 +282,8 @@ export function ThemeManager({ themes, windowOpacity, onClose, onCreate, onUpdat
           onConfirm={() => void confirmDelete()}
         />
       ) : null}
-    </div>
+      </div>
+    </ManagementShell>
   );
 }
 
@@ -324,7 +352,12 @@ function Confirmation({
 }) {
   const { t } = useI18n();
   return (
-    <div className="theme-confirmation" role="alertdialog" aria-modal="true" aria-label={title}>
+    <div
+      className="theme-confirmation management-confirmation"
+      role="alertdialog"
+      aria-modal="true"
+      aria-label={title}
+    >
       <div className="theme-confirmation__card">
         <strong>{title}</strong>
         <p>{body}</p>

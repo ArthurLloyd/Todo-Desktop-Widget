@@ -69,6 +69,7 @@ mod tests {
             is_primary: false,
             is_open: true,
             pinned: false,
+            pane_count: 1,
             window_x: None,
             window_y: None,
             window_width: None,

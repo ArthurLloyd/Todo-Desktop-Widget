@@ -171,6 +171,7 @@ pub struct WidgetInstanceDto {
     pub is_primary: bool,
     pub is_open: bool,
     pub pinned: bool,
+    pub pane_count: i64,
     pub window_x: Option<i32>,
     pub window_y: Option<i32>,
     pub window_width: Option<u32>,

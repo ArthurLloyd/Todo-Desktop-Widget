@@ -99,6 +99,7 @@ export type WidgetInstance = {
   isPrimary: boolean;
   isOpen: boolean;
   pinned: boolean;
+  paneCount: number;
   windowX?: number | null;
   windowY?: number | null;
   windowWidth?: number | null;

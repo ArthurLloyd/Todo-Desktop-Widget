@@ -19,8 +19,8 @@ export function ThemePreview({ config, fallbackConfig, windowOpacity }: Props) {
   );
 
   return (
-    <section className="theme-preview-stage" aria-label={t("themeEditor.preview")}>
-      <div className="theme-preview-window" style={themeStyle}>
+    <section className="theme-preview-stage" aria-label={t("themeEditor.preview")} style={themeStyle}>
+      <div className="theme-preview-window">
         <header className="theme-preview-window__header">
           <strong>{t("themeEditor.previewWidget")}</strong>
           <span>{t("themeEditor.previewButton")}</span>

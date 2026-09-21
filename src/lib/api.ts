@@ -13,6 +13,7 @@ import type {
   WidgetContext,
   WidgetLayoutMode,
   WidgetPane,
+  WidgetPaneInput,
   WidgetTaskSnapshot,
   WidgetTheme,
   WidgetThemeInput,
@@ -212,6 +213,18 @@ export const api = {
   listWidgetInstances: () => call<WidgetInstance[]>("list_widget_instances"),
   getWidgetInstance: (id: string) =>
     call<WidgetInstance>("get_widget_instance", { id }),
+  getWidgetContext: (instanceId: string) =>
+    call<WidgetContext>("get_widget_context", { instanceId }),
+  updateManagedWidget: (instanceId: string, input: WidgetInstanceInput) =>
+    call<WidgetInstance>("update_managed_widget", { instanceId, input }),
+  createManagedWidgetPane: (instanceId: string, listId?: string | null) =>
+    call<WidgetPane>("create_managed_widget_pane", { instanceId, listId: listId ?? null }),
+  updateManagedWidgetPane: (instanceId: string, paneId: string, input: WidgetPaneInput) =>
+    call<WidgetPane>("update_managed_widget_pane", { instanceId, paneId, input }),
+  deleteManagedWidgetPane: (instanceId: string, paneId: string) =>
+    call<void>("delete_managed_widget_pane", { instanceId, paneId }),
+  reorderManagedWidgetPanes: (instanceId: string, orderedPaneIds: string[]) =>
+    call<WidgetPane[]>("reorder_managed_widget_panes", { instanceId, orderedPaneIds }),
   createWidgetInstance: (input: WidgetInstanceInput) =>
     call<WidgetInstance>("create_widget_instance", { input }),
   updateWidgetInstance: (id: string, input: WidgetInstanceInput) =>
@@ -246,8 +259,18 @@ export const api = {
     call<WidgetPane>("set_current_widget_pane_theme", { paneId, themeId: themeId ?? null }),
   createWidgetWindow: (initialListId?: string | null) =>
     call<WidgetInstance>("create_widget_window", { initialListId: initialListId ?? null }),
+  duplicateWidgetWindow: (sourceInstanceId: string) =>
+    call<WidgetInstance>("duplicate_widget_window", { sourceInstanceId }),
   openWidgetWindow: (instanceId: string) =>
     call<void>("open_widget_window", { instanceId }),
+  showManagedWidgetWindow: (instanceId: string) =>
+    call<void>("show_managed_widget_window", { instanceId }),
+  closeManagedWidgetWindow: (instanceId: string) =>
+    call<void>("close_managed_widget_window", { instanceId }),
+  setManagedWidgetPinned: (instanceId: string, pinned: boolean) =>
+    call<void>("set_managed_widget_pinned", { instanceId, pinned }),
+  deleteManagedWidget: (instanceId: string) =>
+    call<void>("delete_managed_widget", { instanceId }),
   closeCurrentWidgetWindow: () => call<void>("close_current_widget_window"),
   updateCurrentWidgetList: (listId: string) =>
     call<WidgetPane>("update_current_widget_list", { listId }),

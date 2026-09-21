@@ -1,7 +1,7 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
 };
 
 pub fn init(app: &AppHandle) -> anyhow::Result<()> {
@@ -35,11 +35,17 @@ pub fn init(app: &AppHandle) -> anyhow::Result<()> {
                 });
             }
             "settings" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = crate::desktop_window::show_widget_window(&window);
-                    let _ = window.set_focus();
-                    let _ = crate::desktop_window::enforce_widget_window_z_order(&window);
-                }
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    match crate::widget_window::activate_primary_from_tray(&app).await {
+                        Ok(window) => {
+                            if let Err(error) = window.emit("open-settings", ()) {
+                                eprintln!("[tray] failed to open primary settings: {error}");
+                            }
+                        }
+                        Err(error) => eprintln!("[tray] failed to activate primary: {error}"),
+                    }
+                });
             }
             "quit" => app.exit(0),
             _ => {}
@@ -51,18 +57,13 @@ pub fn init(app: &AppHandle) -> anyhow::Result<()> {
                 ..
             } = event
             {
-                let app = tray.app_handle();
-                let any_visible = crate::widget_window::list_runtime_widget_windows(app)
-                    .iter()
-                    .any(|window| window.is_visible().unwrap_or(false));
-                if any_visible {
-                    hide_all_widgets(app);
-                } else {
-                    let app = app.clone();
-                    tauri::async_runtime::spawn(async move {
-                        crate::widget_window::show_open_widget_windows(&app).await;
-                    });
-                }
+                let app = tray.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = crate::widget_window::activate_primary_from_tray(&app).await
+                    {
+                        eprintln!("[tray] failed to activate primary: {error}");
+                    }
+                });
             }
         });
 

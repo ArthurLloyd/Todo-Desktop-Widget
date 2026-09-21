@@ -402,6 +402,115 @@ pub fn get_widget_instance(
 }
 
 #[tauri::command]
+pub fn get_widget_context(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> Result<WidgetContextDto, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    let instance = widget_config::get_widget_instance(&conn, &instance_id).map_err(to_string)?;
+    let panes = widget_config::list_widget_panes(&conn, &instance_id).map_err(to_string)?;
+    Ok(WidgetContextDto { instance, panes })
+}
+
+#[tauri::command]
+pub fn update_managed_widget(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    input: WidgetInstanceInput,
+) -> Result<WidgetInstanceDto, String> {
+    let instance = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::update_widget_instance(&conn, &instance_id, &input).map_err(to_string)?
+    };
+    widget_window::emit_widget_config_changed(&app, &instance_id);
+    Ok(instance)
+}
+
+#[tauri::command]
+pub fn create_managed_widget_pane(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    list_id: Option<String>,
+) -> Result<WidgetPaneDto, String> {
+    let pane = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::create_pane_for_widget(&conn, &instance_id, list_id.as_deref())
+            .map_err(to_string)?
+    };
+    widget_window::emit_widget_config_changed(&app, &instance_id);
+    Ok(pane)
+}
+
+#[tauri::command]
+pub fn update_managed_widget_pane(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    pane_id: String,
+    input: WidgetPaneInput,
+) -> Result<WidgetPaneDto, String> {
+    let pane = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::update_widget_pane_for_widget(&conn, &instance_id, &pane_id, &input)
+            .map_err(to_string)?
+    };
+    widget_window::emit_widget_config_changed(&app, &instance_id);
+    Ok(pane)
+}
+
+#[tauri::command]
+pub fn delete_managed_widget_pane(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    pane_id: String,
+) -> Result<(), String> {
+    {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::delete_widget_pane_for_widget(&conn, &instance_id, &pane_id)
+            .map_err(to_string)?;
+    }
+    widget_window::emit_widget_config_changed(&app, &instance_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reorder_managed_widget_panes(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    ordered_pane_ids: Vec<String>,
+) -> Result<Vec<WidgetPaneDto>, String> {
+    let panes = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::reorder_widget_panes(&conn, &instance_id, &ordered_pane_ids)
+            .map_err(to_string)?
+    };
+    widget_window::emit_widget_config_changed(&app, &instance_id);
+    Ok(panes)
+}
+
+#[tauri::command]
 pub fn create_widget_instance(
     state: State<'_, AppState>,
     input: WidgetInstanceInput,
@@ -769,14 +878,127 @@ pub async fn create_widget_window(
         }
         widget_config::get_widget_instance(&conn, &instance.id).map_err(to_string)?
     };
-    widget_window::open_widget_window(&app, &instance.id).await?;
+    if let Err(error) = widget_window::open_widget_window(&app, &instance.id).await {
+        if let Ok(conn) = state.db.lock() {
+            let _ = widget_config::set_widget_open(&conn, &instance.id, false);
+        }
+        widget_window::emit_widget_config_changed(&app, &instance.id);
+        return Err(error);
+    }
     widget_window::emit_widget_config_changed(&app, &instance.id);
     Ok(instance)
 }
 
 #[tauri::command]
+pub async fn duplicate_widget_window(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    source_instance_id: String,
+) -> Result<WidgetInstanceDto, String> {
+    let fallback_position = window.outer_position().ok();
+    let fallback_size = window.inner_size().ok();
+    let duplicated = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        let source =
+            widget_config::get_widget_instance(&conn, &source_instance_id).map_err(to_string)?;
+        let duplicated = widget_config::duplicate_widget_instance(&conn, &source_instance_id)
+            .map_err(to_string)?;
+        let geometry = match (
+            source.window_x,
+            source.window_y,
+            source.window_width,
+            source.window_height,
+        ) {
+            (Some(x), Some(y), Some(width), Some(height)) => Some((x, y, width, height)),
+            _ => fallback_position
+                .zip(fallback_size)
+                .map(|(position, size)| (position.x, position.y, size.width, size.height)),
+        };
+        if let Some((x, y, width, height)) = geometry {
+            if let Err(error) = widget_config::save_widget_geometry(
+                &conn,
+                &duplicated.id,
+                x.saturating_add(32),
+                y.saturating_add(32),
+                width,
+                height,
+            ) {
+                eprintln!("[widget-manager] failed to save duplicate geometry: {error}");
+            }
+        }
+        widget_config::get_widget_instance(&conn, &duplicated.id).map_err(to_string)?
+    };
+
+    if let Err(error) = widget_window::open_widget_window(&app, &duplicated.id).await {
+        if let Ok(conn) = state.db.lock() {
+            let _ = widget_config::set_widget_open(&conn, &duplicated.id, false);
+        }
+        widget_window::emit_widget_config_changed(&app, &duplicated.id);
+        return Err(error);
+    }
+    widget_window::emit_widget_config_changed(&app, &duplicated.id);
+    Ok(duplicated)
+}
+
+#[tauri::command]
 pub async fn open_widget_window(app: AppHandle, instance_id: String) -> Result<(), String> {
     widget_window::open_widget_window(&app, &instance_id).await?;
+    widget_window::emit_widget_config_changed(&app, &instance_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn show_managed_widget_window(app: AppHandle, instance_id: String) -> Result<(), String> {
+    widget_window::show_widget_instance(&app, &instance_id).await?;
+    widget_window::emit_widget_config_changed(&app, &instance_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn close_managed_widget_window(
+    app: AppHandle,
+    instance_id: String,
+) -> Result<(), String> {
+    widget_window::close_widget_instance(&app, &instance_id).await
+}
+
+#[tauri::command]
+pub async fn set_managed_widget_pinned(
+    app: AppHandle,
+    instance_id: String,
+    pinned: bool,
+) -> Result<(), String> {
+    widget_window::set_widget_instance_pinned(&app, &instance_id, pinned).await
+}
+
+#[tauri::command]
+pub async fn delete_managed_widget(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> Result<(), String> {
+    let instance = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::get_widget_instance(&conn, &instance_id).map_err(to_string)?
+    };
+    if instance.is_primary {
+        return Err("the primary widget instance cannot be deleted".to_string());
+    }
+    widget_window::close_widget_instance(&app, &instance_id).await?;
+    {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::delete_widget_instance(&conn, &instance_id).map_err(to_string)?;
+    }
     widget_window::emit_widget_config_changed(&app, &instance_id);
     Ok(())
 }

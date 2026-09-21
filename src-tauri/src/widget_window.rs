@@ -79,6 +79,59 @@ pub async fn open_widget_window(app: &AppHandle, instance_id: &str) -> Result<()
     result
 }
 
+pub async fn show_widget_instance(app: &AppHandle, instance_id: &str) -> Result<(), String> {
+    let instance = load_widget_instance(app, instance_id)?;
+    if instance.is_primary {
+        let window = app
+            .get_webview_window(PRIMARY_WINDOW_LABEL)
+            .ok_or_else(|| "primary widget window is not available".to_string())?;
+        crate::desktop_window::show_widget_window(&window)?;
+        return Ok(());
+    }
+    open_widget_window(app, instance_id).await
+}
+
+pub async fn close_widget_instance(app: &AppHandle, instance_id: &str) -> Result<(), String> {
+    let instance = load_widget_instance(app, instance_id)?;
+    if instance.is_primary {
+        return Err("the primary widget cannot be closed independently".to_string());
+    }
+    let label = widget_window_label(&instance)?;
+    if let Some(window) = app.get_webview_window(&label) {
+        return close_secondary_widget(&window).await;
+    }
+    mark_open(app, instance_id, false)?;
+    emit_widget_config_changed(app, instance_id);
+    Ok(())
+}
+
+pub async fn set_widget_instance_pinned(
+    app: &AppHandle,
+    instance_id: &str,
+    pinned: bool,
+) -> Result<(), String> {
+    let instance = load_widget_instance(app, instance_id)?;
+    let label = widget_window_label(&instance)?;
+    if let Some(window) = app.get_webview_window(&label) {
+        crate::desktop_window::set_widget_window_mode(
+            &window,
+            if pinned { "pinned" } else { "normal" },
+        )
+        .await?;
+    }
+    let state = app
+        .try_state::<AppState>()
+        .ok_or_else(|| "app state is not initialized".to_string())?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::set_widget_pinned(&conn, instance_id, pinned).map_err(to_string)?;
+    drop(conn);
+    emit_widget_config_changed(app, instance_id);
+    Ok(())
+}
+
 async fn create_widget_window(
     app: &AppHandle,
     instance: &WidgetInstanceDto,
@@ -273,6 +326,14 @@ pub async fn show_open_widget_windows(app: &AppHandle) {
     }
 }
 
+pub async fn activate_primary_from_tray(app: &AppHandle) -> Result<WebviewWindow, String> {
+    let window = app
+        .get_webview_window(PRIMARY_WINDOW_LABEL)
+        .ok_or_else(|| "primary widget window is not available".to_string())?;
+    crate::desktop_window::activate_widget_window(&window).await?;
+    Ok(window)
+}
+
 pub async fn restore_widget_windows(app: AppHandle) {
     let (primary, secondary) = {
         let Some(state) = app.try_state::<AppState>() else {
@@ -359,6 +420,17 @@ fn resolve_instance_id(window: &WebviewWindow) -> Result<String, String> {
                 .id)
         }
     }
+}
+
+fn load_widget_instance(app: &AppHandle, instance_id: &str) -> Result<WidgetInstanceDto, String> {
+    let state = app
+        .try_state::<AppState>()
+        .ok_or_else(|| "app state is not initialized".to_string())?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::get_widget_instance(&conn, instance_id).map_err(to_string)
 }
 
 fn mark_open(app: &AppHandle, id: &str, is_open: bool) -> Result<(), String> {

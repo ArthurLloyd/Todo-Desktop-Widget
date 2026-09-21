@@ -2,6 +2,7 @@ use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, WebviewWindow};
 
+use crate::tray_activation::{action_for_pinned, TrayActivationAction};
 use crate::window_state_map::WindowStateMap;
 
 #[derive(Clone, Debug)]
@@ -70,6 +71,19 @@ pub fn show_widget_window(window: &WebviewWindow) -> Result<(), String> {
 
 pub fn hide_widget_window(window: &WebviewWindow) -> Result<(), String> {
     window.hide().map_err(to_string)
+}
+
+pub async fn activate_widget_window(window: &WebviewWindow) -> Result<(), String> {
+    window.show().map_err(to_string)?;
+    window.unminimize().map_err(to_string)?;
+
+    match action_for_pinned(pinned_state(window.app_handle(), window.label())?) {
+        TrayActivationAction::ActivateNormal => {
+            restore_normal_window(window).await?;
+            window.set_focus().map_err(to_string)
+        }
+        TrayActivationAction::ShowAndEnforcePinned => show_widget_window(window),
+    }
 }
 
 pub fn enable_bottom_fallback(window: &WebviewWindow) -> Result<(), String> {

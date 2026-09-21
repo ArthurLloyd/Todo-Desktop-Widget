@@ -7,6 +7,7 @@
     "dev": "vite --host 127.0.0.1 --port 1420",
     "build": "tsc && vite build",
     "test:theme": "node --test --experimental-strip-types tests/themeRuntime.test.ts tests/themeEditor.test.ts",
+    "test:management": "node --test --experimental-strip-types tests/widgetView.test.ts tests/managementTheme.test.ts",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

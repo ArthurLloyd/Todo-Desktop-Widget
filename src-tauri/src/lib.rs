@@ -17,6 +17,7 @@ mod sync;
 mod sync_coordinator;
 #[cfg(not(test))]
 mod tray;
+mod tray_activation;
 mod widget_config;
 mod widget_snapshot;
 #[cfg(not(test))]
@@ -149,6 +150,12 @@ pub fn run() {
             commands::update_settings,
             commands::list_widget_instances,
             commands::get_widget_instance,
+            commands::get_widget_context,
+            commands::update_managed_widget,
+            commands::create_managed_widget_pane,
+            commands::update_managed_widget_pane,
+            commands::delete_managed_widget_pane,
+            commands::reorder_managed_widget_panes,
             commands::create_widget_instance,
             commands::update_widget_instance,
             commands::delete_widget_instance,
@@ -171,7 +178,12 @@ pub fn run() {
             commands::set_current_widget_theme,
             commands::set_current_widget_pane_theme,
             commands::create_widget_window,
+            commands::duplicate_widget_window,
             commands::open_widget_window,
+            commands::show_managed_widget_window,
+            commands::close_managed_widget_window,
+            commands::set_managed_widget_pinned,
+            commands::delete_managed_widget,
             commands::close_current_widget_window,
             commands::update_current_widget_list,
             commands::set_window_mode,

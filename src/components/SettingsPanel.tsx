@@ -1,20 +1,17 @@
-import { ExternalLink, LogIn, LogOut, Palette, Plus, RotateCcw, Trash2, UserCircle, X } from "lucide-react";
-import { useState } from "react";
+import { LayoutDashboard, LogIn, LogOut, Palette, RotateCcw, UserCircle } from "lucide-react";
 import { localizeBackendMessage, useI18n } from "../lib/i18n";
+import type { ManagementThemeCssVariables } from "../lib/managementTheme";
 import type {
   AuthStatus,
   Settings,
-  TaskList,
   WidgetContext,
-  WidgetInstance,
   WidgetLayoutMode,
   WidgetTheme,
-  WidgetThemeInput,
 } from "../lib/types";
-import { ThemeManager } from "./ThemeManager";
+import { ManagementShell } from "./ManagementShell";
 
 type Props = {
-  open: boolean;
+  managementThemeStyle: ManagementThemeCssVariables;
   auth: AuthStatus;
   settings: Settings;
   loginNotice?: string | null;
@@ -23,29 +20,18 @@ type Props = {
   onLogout: () => void;
   onChange: (settings: Partial<Settings>) => void;
   onEnsureLists: () => void;
-  widgetInstances: WidgetInstance[];
-  currentWidgetId: string | null;
-  onCreateWidget: () => void;
-  onOpenWidget: (instanceId: string) => void;
-  onCloseWidget?: () => void;
   currentWidget: WidgetContext | null;
-  taskLists: TaskList[];
   widgetThemes: WidgetTheme[];
   configError?: string | null;
-  onRenameWidget: (name: string) => void;
+  onTogglePinned: () => void;
   onChangeLayout: (layoutMode: WidgetLayoutMode) => void;
   onChangeWidgetTheme: (themeId: string) => void;
-  onCreateTheme: (input: WidgetThemeInput) => Promise<WidgetTheme>;
-  onUpdateTheme: (id: string, input: WidgetThemeInput) => Promise<WidgetTheme>;
-  onDeleteTheme: (id: string) => Promise<void>;
-  onAddPane: () => void;
-  onSelectPaneList: (paneId: string, listId: string) => void;
-  onChangePaneTheme: (paneId: string, themeId: string | null) => void;
-  onDeletePane: (paneId: string) => void;
+  onOpenWidgetManager: () => void;
+  onOpenThemeManager: () => void;
 };
 
 export function SettingsPanel({
-  open,
+  managementThemeStyle,
   auth,
   settings,
   loginNotice,
@@ -54,39 +40,20 @@ export function SettingsPanel({
   onLogout,
   onChange,
   onEnsureLists,
-  widgetInstances,
-  currentWidgetId,
-  onCreateWidget,
-  onOpenWidget,
-  onCloseWidget,
   currentWidget,
-  taskLists,
   widgetThemes,
   configError,
-  onRenameWidget,
+  onTogglePinned,
   onChangeLayout,
   onChangeWidgetTheme,
-  onCreateTheme,
-  onUpdateTheme,
-  onDeleteTheme,
-  onAddPane,
-  onSelectPaneList,
-  onChangePaneTheme,
-  onDeletePane,
+  onOpenWidgetManager,
+  onOpenThemeManager,
 }: Props) {
   const { t } = useI18n();
-  const [themeManagerOpen, setThemeManagerOpen] = useState(false);
-
-  if (!open) return null;
 
   return (
-    <aside className="settings-panel">
-      <div className="settings-panel__header">
-        <h2>{t("settings.title")}</h2>
-        <button className="icon-button" title={t("settings.close")} onClick={onClose}>
-          <X size={16} />
-        </button>
-      </div>
+    <ManagementShell title={t("settings.title")} themeStyle={managementThemeStyle} onClose={onClose}>
+      <div className="settings-panel">
 
       <section
         className={
@@ -112,8 +79,9 @@ export function SettingsPanel({
       <label className="settings-row settings-row--stacked">
         <span>{t("settings.opacity", { value: Math.round(settings.opacity * 100) })}</span>
         <input
-          min={70}
+          min={0}
           max={100}
+          step={1}
           type="range"
           value={Math.round(settings.opacity * 100)}
           onChange={(event) => onChange({ opacity: Number(event.target.value) / 100 })}
@@ -196,53 +164,27 @@ export function SettingsPanel({
         />
       </label>
 
-      <section className="settings-group widget-manager">
-        <div className="widget-manager__heading">
-          <strong>{t("widget.desktopWidgets")}</strong>
-          <button className="text-button" onClick={onCreateWidget}>
-            <Plus size={15} />
-            {t("widget.newWindow")}
-          </button>
+      <section className="settings-group widget-manager-entry-group">
+        <div>
+          <strong>{t("widgetManager.managerTitle")}</strong>
+          <span>{t("widgetManager.settingsHint")}</span>
         </div>
-        <div className="widget-manager__list">
-          {widgetInstances.map((instance) => (
-            <div className="widget-manager__item" key={instance.id}>
-              <span>{instance.name}{instance.isPrimary ? ` · ${t("widget.primary")}` : ""}</span>
-              {!instance.isPrimary && (
-                <button
-                  className="text-button"
-                  disabled={instance.id === currentWidgetId}
-                  onClick={() => onOpenWidget(instance.id)}
-                >
-                  <ExternalLink size={14} />
-                  {instance.id === currentWidgetId ? t("widget.current") : instance.isOpen ? t("widget.show") : t("widget.open")}
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        {onCloseWidget && (
-          <button className="secondary-button" onClick={onCloseWidget}>
-            {t("widget.closeWindow")}
-          </button>
-        )}
+        <button className="secondary-button" type="button" onClick={onOpenWidgetManager}>
+          <LayoutDashboard size={16} />
+          {t("widgetManager.manageDesktopWidgets")}
+        </button>
       </section>
 
       {currentWidget && (
-        <section className="settings-group pane-manager">
+        <section className="settings-group current-widget-settings">
           <strong>{t("pane.currentWidget")}</strong>
+          <div className="current-widget-settings__name">
+            <span>{currentWidget.instance.name}</span>
+            <small>{currentWidget.instance.isPrimary ? t("widget.primary") : t("widgetManager.secondary")}</small>
+          </div>
           <label className="settings-row">
-            <span>{t("pane.windowName")}</span>
-            <input
-              key={currentWidget.instance.name}
-              className="settings-text-input"
-              defaultValue={currentWidget.instance.name}
-              aria-label={t("pane.windowName")}
-              onBlur={(event) => onRenameWidget(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-              }}
-            />
+            <span>{t("widgetManager.pinToDesktop")}</span>
+            <input type="checkbox" checked={currentWidget.instance.pinned} onChange={onTogglePinned} />
           </label>
           <label className="settings-row">
             <span>{t("pane.layout")}</span>
@@ -259,7 +201,7 @@ export function SettingsPanel({
           <button
             className="secondary-button theme-manager-entry"
             type="button"
-            onClick={() => setThemeManagerOpen(true)}
+            onClick={onOpenThemeManager}
           >
             <Palette size={15} />
             {t("themeEditor.manageThemes")}
@@ -289,66 +231,6 @@ export function SettingsPanel({
           {currentWidget.instance.layoutMode === "single" && currentWidget.panes.length > 1 && (
             <span className="settings-hint">{t("pane.singleHint")}</span>
           )}
-          <div className="pane-manager__heading">
-            <span>{t("pane.sections")}</span>
-            <button className="text-button" type="button" onClick={onAddPane}>
-              <Plus size={15} />
-              {t("pane.add")}
-            </button>
-          </div>
-          <div className="pane-manager__list">
-            {currentWidget.panes.map((pane) => {
-              const list = taskLists.find((item) => item.id === pane.listId);
-              const name = pane.titleOverride || list?.displayName ||
-                (pane.listId ? t("pane.listUnavailable") : t("pane.selectList"));
-              return (
-                <div className="pane-manager__item" key={pane.id}>
-                  <span>{name}</span>
-                  <select
-                    aria-label={t("pane.listSelector", { name })}
-                    value={list?.id || ""}
-                    onChange={(event) => {
-                      if (event.target.value) onSelectPaneList(pane.id, event.target.value);
-                    }}
-                  >
-                    <option value="" disabled>
-                      {pane.listId ? t("pane.listUnavailable") : t("pane.selectList")}
-                    </option>
-                    {taskLists.map((item) => (
-                      <option key={item.id} value={item.id}>{item.displayName}</option>
-                    ))}
-                  </select>
-                  <select
-                    aria-label={t("theme.paneThemeNamed", { name })}
-                    value={
-                      !pane.themeId || widgetThemes.some((theme) => theme.id === pane.themeId)
-                        ? pane.themeId || ""
-                        : "__missing__"
-                    }
-                    onChange={(event) => onChangePaneTheme(pane.id, event.target.value || null)}
-                  >
-                    <option value="">{t("theme.inheritWindow")}</option>
-                    {pane.themeId && !widgetThemes.some((theme) => theme.id === pane.themeId) && (
-                      <option value="__missing__" disabled>{t("theme.unavailable")}</option>
-                    )}
-                    {widgetThemes.map((theme) => (
-                      <option key={theme.id} value={theme.id}>{displayThemeName(theme, t)}</option>
-                    ))}
-                  </select>
-                  <button
-                    className="icon-button icon-button--danger"
-                    type="button"
-                    disabled={currentWidget.panes.length <= 1}
-                    title={currentWidget.panes.length <= 1 ? t("pane.atLeastOne") : t("pane.remove")}
-                    aria-label={t("pane.removeNamed", { name })}
-                    onClick={() => onDeletePane(pane.id)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
           {configError && (
             <span className="settings-error">{localizeBackendMessage(configError, t)}</span>
           )}
@@ -359,18 +241,8 @@ export function SettingsPanel({
         <RotateCcw size={16} />
         {t("settings.syncRemoteLists")}
       </button>
-
-      {themeManagerOpen ? (
-        <ThemeManager
-          themes={widgetThemes}
-          windowOpacity={settings.opacity}
-          onClose={() => setThemeManagerOpen(false)}
-          onCreate={onCreateTheme}
-          onUpdate={onUpdateTheme}
-          onDelete={onDeleteTheme}
-        />
-      ) : null}
-    </aside>
+      </div>
+    </ManagementShell>
   );
 }
 

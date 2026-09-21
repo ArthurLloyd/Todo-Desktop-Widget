@@ -131,7 +131,9 @@ pub fn set_setting(conn: &Connection, key: &str, value: &str) -> anyhow::Result<
 pub fn load_settings(conn: &Connection) -> anyhow::Result<SettingsDto> {
     let value = get_setting(conn, "settings")?;
     match value {
-        Some(raw) => Ok(serde_json::from_str(&raw).unwrap_or_default()),
+        Some(raw) => Ok(crate::settings::sanitize(
+            serde_json::from_str(&raw).unwrap_or_default(),
+        )),
         None => Ok(SettingsDto::default()),
     }
 }
