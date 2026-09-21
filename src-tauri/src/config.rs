@@ -31,7 +31,7 @@ pub fn tenant(app: &tauri::App) -> String {
         option_env!("MICROSOFT_TENANT").map(ToString::to_string),
         read_config(app).and_then(|config| config.microsoft_tenant),
     ])
-    .unwrap_or_else(|| "consumers".to_string())
+    .unwrap_or_else(|| "common".to_string())
 }
 
 pub fn macos_app_group_id(app: &tauri::App) -> String {

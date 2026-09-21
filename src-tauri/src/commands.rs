@@ -397,13 +397,14 @@ pub fn update_settings(
 }
 
 #[tauri::command]
-pub fn get_app_info(app: AppHandle) -> AppInfoDto {
+pub fn get_app_info(app: AppHandle, state: State<'_, AppState>) -> AppInfoDto {
     let package = app.package_info();
     AppInfoDto {
         name: "Todo Desktop Widget".to_string(),
         version: package.version.to_string(),
         platform: std::env::consts::OS.to_string(),
         architecture: std::env::consts::ARCH.to_string(),
+        microsoft_client_configured: state.client_id.is_some(),
     }
 }
 

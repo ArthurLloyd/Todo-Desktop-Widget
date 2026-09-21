@@ -446,7 +446,11 @@ function WidgetApp() {
           <WidgetLoadError message={initialLoadError} onRetry={() => void loadInitialState()} />
         ) : null}
         {startupPresentation === "first-run" ? (
-          <FirstRunState onLogin={() => void handleLogin()} onOpenSettings={openSettings} />
+          <FirstRunState
+            microsoftClientConfigured={appInfo?.microsoftClientConfigured ?? true}
+            onLogin={() => void handleLogin()}
+            onOpenSettings={openSettings}
+          />
         ) : null}
         {startupPresentation === "ready" && widgetContext ? (
           <PaneLayout

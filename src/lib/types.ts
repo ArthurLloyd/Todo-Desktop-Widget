@@ -78,6 +78,7 @@ export type AppInfo = {
   version: string;
   platform: string;
   architecture: string;
+  microsoftClientConfigured: boolean;
 };
 
 export type WidgetLayoutMode = "single" | "columns" | "rows" | "grid";

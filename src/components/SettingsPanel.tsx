@@ -57,6 +57,7 @@ export function SettingsPanel({
   const { t } = useI18n();
   const [autostartBusy, setAutostartBusy] = useState(false);
   const [autostartError, setAutostartError] = useState<string | null>(null);
+  const microsoftClientConfigured = appInfo?.microsoftClientConfigured ?? true;
 
   async function updateAutostart(enabled: boolean) {
     if (autostartBusy) return;
@@ -90,11 +91,18 @@ export function SettingsPanel({
               (auth.loggedIn ? t("settings.connectedHint") : t("settings.signedOutHint"))}
           </span>
         </div>
-        <button className="text-button" onClick={auth.loggedIn ? onLogout : onLogin}>
+        <button
+          className="text-button"
+          disabled={!auth.loggedIn && !microsoftClientConfigured}
+          onClick={auth.loggedIn ? onLogout : onLogin}
+        >
           {auth.loggedIn ? <LogOut size={16} /> : <LogIn size={16} />}
           {auth.loggedIn ? t("settings.logout") : t("settings.login")}
         </button>
       </section>
+      {!auth.loggedIn && !microsoftClientConfigured ? (
+        <InlineError message={t("settings.microsoftClientNotConfigured")} />
+      ) : null}
 
       <label className="settings-row settings-row--stacked">
         <span>{t("settings.opacity", { value: Math.round(settings.opacity * 100) })}</span>
@@ -198,7 +206,6 @@ export function SettingsPanel({
           {t("widgetManager.manageDesktopWidgets")}
         </button>
       </section>
-
       {currentWidget && (
         <section className="settings-group current-widget-settings">
           <strong>{t("pane.currentWidget")}</strong>

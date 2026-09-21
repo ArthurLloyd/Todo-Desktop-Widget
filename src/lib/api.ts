@@ -209,6 +209,7 @@ export const api = {
       version: "development",
       platform: "web",
       architecture: "unknown",
+      microsoftClientConfigured: false,
     }),
   updateSettings: async (settings: Partial<Settings>) => {
     try {

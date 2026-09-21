@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ms-todo-desktop-widget",
+  "productName": "Todo Desktop Widget",
   "version": "../package.json",
   "identifier": "com.local.ms-todo-desktop-widget",
   "build": {
@@ -43,6 +43,15 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
     "macOS": {
       "minimumSystemVersion": "14.0",
       "entitlements": "../macos-widget/Entitlements/HostApp.entitlements",

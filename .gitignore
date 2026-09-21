@@ -4,5 +4,14 @@ src-tauri/target/
 macos-widget/MicrosoftTodoWidget.xcodeproj/
 macos-widget/build/
 .env
+.env.*
+!.env.example
+ms-todo-desktop-widget.config.json
+*.pfx
+*.p12
+*.pem
+*.key
+certificates/
+release.local.json
 *.log
 .DS_Store

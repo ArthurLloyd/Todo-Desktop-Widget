@@ -128,6 +128,7 @@ pub struct AppInfoDto {
     pub version: String,
     pub platform: String,
     pub architecture: String,
+    pub microsoft_client_configured: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

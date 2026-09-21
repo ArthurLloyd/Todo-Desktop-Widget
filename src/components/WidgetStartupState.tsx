@@ -24,7 +24,15 @@ export function WidgetLoadError({ message, onRetry }: { message: string; onRetry
   );
 }
 
-export function FirstRunState({ onLogin, onOpenSettings }: { onLogin: () => void; onOpenSettings: () => void }) {
+export function FirstRunState({
+  microsoftClientConfigured,
+  onLogin,
+  onOpenSettings,
+}: {
+  microsoftClientConfigured: boolean;
+  onLogin: () => void;
+  onOpenSettings: () => void;
+}) {
   const { t } = useI18n();
   return (
     <section className="first-run-state">
@@ -36,8 +44,16 @@ export function FirstRunState({ onLogin, onOpenSettings }: { onLogin: () => void
         <li>{t("startup.stepChooseList")}</li>
         <li>{t("startup.stepPin")}</li>
       </ol>
+      {!microsoftClientConfigured ? (
+        <InlineError message={t("startup.microsoftClientNotConfigured")} />
+      ) : null}
       <div className="first-run-state__actions">
-        <button className="text-button" type="button" onClick={onLogin}>
+        <button
+          className="text-button"
+          type="button"
+          disabled={!microsoftClientConfigured}
+          onClick={onLogin}
+        >
           <LogIn size={15} /> {t("settings.login")}
         </button>
         <button className="secondary-button" type="button" onClick={onOpenSettings}>

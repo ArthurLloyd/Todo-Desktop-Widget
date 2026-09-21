@@ -58,8 +58,8 @@ Microsoft sign-in requires an Azure App Registration. This app is a desktop publ
 2. Go to Microsoft Entra ID.
 3. Create an App Registration.
 4. Choose supported account types:
-   - Use `consumers` for personal Microsoft accounts only.
-   - Use `common` for both work/school and personal Microsoft accounts.
+   - Use `common` for both work/school and personal Microsoft accounts (the project default).
+   - Use `consumers` only when a build intentionally supports personal Microsoft accounts exclusively.
 5. Add a redirect URI under **Mobile and desktop applications**:
    - `http://localhost`
    - The app uses a local loopback callback with a dynamic port.
@@ -78,7 +78,7 @@ For development:
 
 ```powershell
 $env:MICROSOFT_CLIENT_ID = "your Azure app client id"
-$env:MICROSOFT_TENANT = "consumers"
+$env:MICROSOFT_TENANT = "common"
 npm run tauri:dev
 ```
 
@@ -88,12 +88,12 @@ You can also create a local `.env` file:
 
 ```env
 MICROSOFT_CLIENT_ID=your Azure app client id
-MICROSOFT_TENANT=consumers
+MICROSOFT_TENANT=common
 ```
 
 Do not commit `.env`.
 
-For installed builds, either bake the client ID in at build time or place a config file next to the executable/app bundle.
+Official installed builds bake the public application Client ID in at build time. Ordinary users should not need an environment variable or config file. The external config remains available as a developer/portable fallback.
 
 Build-time configuration:
 
@@ -135,7 +135,7 @@ npm run dev
 
 ## Build
 
-Windows:
+Windows development bundle:
 
 ```powershell
 npm run tauri:build
@@ -146,6 +146,28 @@ Or load `.env` automatically:
 ```powershell
 .\scripts\build-tauri-with-env.ps1
 ```
+
+Official Windows release (preflight, frontend and Rust tests, MSI/NSIS build, and artifact smoke checks):
+
+```powershell
+$env:MICROSOFT_CLIENT_ID = "your Azure app client id"
+$env:MICROSOFT_TENANT = "common"
+npm run release:windows
+```
+
+The Client ID is a public desktop application identifier, not a Client Secret. Never add a Client Secret, access token, refresh token, `.env`, or signing private key to the repository or installer.
+
+Windows artifacts are written to:
+
+```text
+src-tauri/target/release/ms-todo-desktop-widget.exe
+src-tauri/target/release/bundle/nsis/Todo Desktop Widget_<version>_x64-setup.exe
+src-tauri/target/release/bundle/msi/Todo Desktop Widget_<version>_x64_en-US.msi
+```
+
+The NSIS installer is the recommended personal installer and uses current-user scope. The MSI is retained for Windows Installer or managed deployment and uses machine scope. Both use Tauri's WebView2 download bootstrapper strategy.
+
+Unsigned local builds will normally show Windows SmartScreen/Unknown Publisher warnings. Public distribution should use a trusted Windows code-signing certificate and timestamping; no certificate or private key is stored in this repository.
 
 macOS bundles must be built on macOS:
 
@@ -248,15 +270,15 @@ npm run tauri:build:mac:widget
 
 ## Data Storage
 
-The SQLite cache is stored in the Tauri app data directory:
+The SQLite cache is stored in the per-user Tauri app data directory. On Windows the stable identifier keeps it under the roaming AppData namespace:
 
 ```text
-ms-todo-desktop-widget/cache.sqlite3
+%APPDATA%\com.local.ms-todo-desktop-widget\cache.sqlite3
 ```
 
-The exact base directory depends on the operating system and Tauri's app data resolution.
+The installer and application executable are separate from this directory. Normal upgrades preserve it. NSIS retains AppData by default and offers an explicit **Delete app data** checkbox during uninstall; Windows Credential Manager entries are not part of that filesystem cleanup. Users should remove retained credentials explicitly if they want a complete account reset.
 
-Refresh tokens are stored with the OS credential store through the Rust `keyring` crate. Access tokens are requested by the Rust backend and are not exposed to React or browser local storage.
+Refresh tokens are written to the OS credential store through the Rust `keyring` crate. The current compatibility path also retains a local fallback in the SQLite settings store, so keeping AppData can keep login state even when program files are removed. Access tokens are requested by the Rust backend and are not exposed to React or browser local storage.
 
 ## Notes For Open Source Builds
 
@@ -267,7 +289,8 @@ Refresh tokens are stored with the OS credential store through the Rust `keyring
 
 ## Current Limitations
 
-- Autostart is currently stored as a setting, but OS-level autostart wiring is still a follow-up.
+- Windows release artifacts are currently unsigned and may trigger SmartScreen/Unknown Publisher warnings.
+- NSIS can optionally remove AppData during uninstall, but credential cleanup remains explicit.
 - macOS packages must be built on macOS.
 - This app focuses on a compact widget experience, not complete Microsoft To Do feature parity.
 
