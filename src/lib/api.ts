@@ -125,6 +125,14 @@ export const api = {
       return updated;
     }
   },
+  deleteTask: async (taskId: string) => {
+    try {
+      await invoke<void>("delete_task", { taskId });
+    } catch (error) {
+      if (!isNonTauriError(error)) throw error;
+      mockTasks = mockTasks.filter((task) => task.id !== taskId);
+    }
+  },
   openTaskDetails: async (taskId: string) => {
     try {
       await invoke<void>("open_task_details", { taskId });

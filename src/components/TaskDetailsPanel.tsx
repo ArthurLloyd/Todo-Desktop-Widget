@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, Repeat, StickyNote, X } from "lucide-react";
+import { Bell, CalendarDays, Repeat, StickyNote, Trash2, X } from "lucide-react";
 import clsx from "clsx";
 import { useEffect, useMemo, useState, type PointerEvent } from "react";
 import { api } from "../lib/api";
@@ -10,12 +10,23 @@ type Props = {
   task: Task | null;
   taskList?: TaskList;
   saving?: boolean;
+  deleting?: boolean;
   windowed?: boolean;
   onClose: () => void;
   onSave: (taskId: string, patch: TaskPatch) => Promise<void>;
+  onDelete: (taskId: string) => Promise<void>;
 };
 
-export function TaskDetailsPanel({ task, taskList, saving, windowed, onClose, onSave }: Props) {
+export function TaskDetailsPanel({
+  task,
+  taskList,
+  saving,
+  deleting,
+  windowed,
+  onClose,
+  onSave,
+  onDelete,
+}: Props) {
   const { t } = useI18n();
   const [title, setTitle] = useState("");
   const [importance, setImportance] = useState<"low" | "normal" | "high">("normal");
@@ -24,6 +35,7 @@ export function TaskDetailsPanel({ task, taskList, saving, windowed, onClose, on
   const [reminderDateTime, setReminderDateTime] = useState("");
   const [isReminderOn, setIsReminderOn] = useState(false);
   const [recurrenceMode, setRecurrenceMode] = useState<RecurrenceMode>("none");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
     if (!task) return;
@@ -34,6 +46,7 @@ export function TaskDetailsPanel({ task, taskList, saving, windowed, onClose, on
     setReminderDateTime(toDateTimeInput(task.reminderDateTime));
     setIsReminderOn(Boolean(task.isReminderOn));
     setRecurrenceMode(recurrenceToMode(task.recurrence));
+    setConfirmingDelete(false);
   }, [task]);
 
   const dirty = useMemo(() => {
@@ -67,7 +80,7 @@ export function TaskDetailsPanel({ task, taskList, saving, windowed, onClose, on
   }
 
   async function submit() {
-    if (!task || saving) return;
+    if (!task || saving || deleting) return;
     const nextReminder = isReminderOn ? normalizeDateTimeInput(reminderDateTime) : null;
     await onSave(task.id, {
       title: title.trim() || task.title,
@@ -79,6 +92,15 @@ export function TaskDetailsPanel({ task, taskList, saving, windowed, onClose, on
       isReminderOn: Boolean(nextReminder),
       recurrence: buildRecurrence(recurrenceMode, dueDate),
     });
+  }
+
+  async function confirmDelete() {
+    if (!task || saving || deleting) return;
+    try {
+      await onDelete(task.id);
+    } catch {
+      setConfirmingDelete(false);
+    }
   }
 
   return (
@@ -165,11 +187,50 @@ export function TaskDetailsPanel({ task, taskList, saving, windowed, onClose, on
       </div>
 
       <div className="details-actions">
-        <span>{task.dirty ? t("details.waitingUpload") : t("details.synced")}</span>
-        <button className="text-button" disabled={!dirty || saving} onClick={() => void submit()}>
-          {saving ? t("details.saving") : t("details.save")}
+        <button
+          className="details-delete-button"
+          disabled={saving || deleting}
+          onClick={() => setConfirmingDelete(true)}
+        >
+          <Trash2 size={14} />
+          {t("details.deleteTask")}
         </button>
+        <div className="details-actions__primary">
+          <span>{task.dirty ? t("details.waitingUpload") : t("details.synced")}</span>
+          <button
+            className="text-button"
+            disabled={!dirty || saving || deleting}
+            onClick={() => void submit()}
+          >
+            {saving ? t("details.saving") : t("details.save")}
+          </button>
+        </div>
       </div>
+
+      {confirmingDelete ? (
+        <div className="details-confirmation" role="dialog" aria-modal="true" aria-labelledby="delete-task-title">
+          <div className="details-confirmation__card">
+            <h3 id="delete-task-title">{t("details.deleteTaskConfirmTitle")}</h3>
+            <p>{t("details.deleteTaskConfirmBody")}</p>
+            <div className="details-confirmation__actions">
+              <button
+                className="secondary-button"
+                disabled={deleting}
+                onClick={() => setConfirmingDelete(false)}
+              >
+                {t("details.cancel")}
+              </button>
+              <button
+                className="danger-button"
+                disabled={deleting}
+                onClick={() => void confirmDelete()}
+              >
+                {deleting ? t("details.deleting") : t("details.delete")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }

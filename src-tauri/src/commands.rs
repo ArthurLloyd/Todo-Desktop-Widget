@@ -159,6 +159,25 @@ pub fn update_task(
 }
 
 #[tauri::command]
+pub fn delete_task(state: State<'_, AppState>, task_id: String) -> Result<(), String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    let disposition = db::delete_local_task(&conn, &task_id).map_err(to_string)?;
+    let _ = widget_snapshot::export_today(&conn, &state.macos_app_group_id);
+    drop(conn);
+
+    if disposition == db::DeleteTaskDisposition::RemotePending {
+        state
+            .sync_coordinator
+            .request_global_sync(GlobalSyncReason::Mutation);
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn sync_now(state: State<'_, AppState>) -> Result<SyncStatusDto, String> {
     Ok(state.sync_coordinator.run_global_sync_now(&state).await)
 }

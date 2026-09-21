@@ -114,6 +114,7 @@ pub fn run() {
             commands::add_task_to_list,
             commands::complete_task,
             commands::update_task,
+            commands::delete_task,
             commands::open_task_details,
             commands::sync_now,
             commands::sync_list_now,

@@ -223,6 +223,7 @@ async fn flush_pending_ops(state: &AppState, access_token: &str) -> anyhow::Resu
             "create_task" => flush_create_task(state, access_token, &op).await,
             "update_task" => flush_update_task(state, access_token, &op).await,
             "complete_task" => flush_complete_task(state, access_token, &op).await,
+            "delete_task" => flush_delete_task(state, access_token, &op).await,
             _ => Err(anyhow!("unknown pending op {}", op.op_type)),
         };
 
@@ -230,13 +231,23 @@ async fn flush_pending_ops(state: &AppState, access_token: &str) -> anyhow::Resu
             .db
             .lock()
             .map_err(|_| anyhow!("database lock poisoned"))?;
-        match result {
-            Ok(()) => {
+        let result = result.and_then(|()| {
+            if op.op_type == "delete_task" {
+                let task_id = op
+                    .task_id
+                    .as_deref()
+                    .ok_or_else(|| anyhow!("missing task id"))?;
+                db::finalize_remote_task_delete(&conn, task_id, &op.op_id)
+            } else {
                 conn.execute(
                     "DELETE FROM pending_ops WHERE op_id = ?1",
                     params![op.op_id],
                 )?;
+                Ok(())
             }
+        });
+        match result {
+            Ok(()) => {}
             Err(error) => {
                 failures.push(error.to_string());
                 conn.execute(
@@ -252,6 +263,34 @@ async fn flush_pending_ops(state: &AppState, access_token: &str) -> anyhow::Resu
     }
 
     Ok(())
+}
+
+async fn flush_delete_task(
+    state: &AppState,
+    access_token: &str,
+    op: &PendingOp,
+) -> anyhow::Result<()> {
+    let task_id = op
+        .task_id
+        .as_deref()
+        .ok_or_else(|| anyhow!("missing task id"))?;
+    let (remote_list_id, graph_id) = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| anyhow!("database lock poisoned"))?;
+        let list_id = remote_list_id_for_task(&conn, task_id)?;
+        let graph_id = conn
+            .query_row(
+                "SELECT graph_id FROM tasks WHERE id = ?1 AND pending_delete = 1",
+                params![task_id],
+                |row| row.get::<_, Option<String>>(0),
+            )?
+            .ok_or_else(|| anyhow!("pending delete task has no remote id"))?;
+        (list_id, graph_id)
+    };
+
+    graph::delete_task(&state.http, access_token, &remote_list_id, &graph_id).await
 }
 
 async fn flush_create_task(
@@ -278,10 +317,16 @@ async fn flush_create_task(
         .db
         .lock()
         .map_err(|_| anyhow!("database lock poisoned"))?;
-    conn.execute(
+    let updated = conn.execute(
         "UPDATE tasks SET graph_id = ?2, dirty = 0, modified_at = ?3 WHERE id = ?1",
         params![task_id, task.id, task.last_modified_date_time],
     )?;
+    if updated == 0 {
+        db::queue_inflight_created_task_delete(&conn, &local_task, &task.id)?;
+        state
+            .sync_coordinator
+            .request_global_sync(crate::sync_coordinator::GlobalSyncReason::Mutation);
+    }
     Ok(())
 }
 

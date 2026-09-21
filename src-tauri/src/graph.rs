@@ -1,5 +1,5 @@
 use anyhow::Context;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::json;
 
 use crate::models::{GraphCollection, GraphTask, GraphTaskList, GraphUserProfile, TaskDto};
@@ -93,6 +93,30 @@ pub async fn complete_task(
     Ok(())
 }
 
+pub async fn delete_task(
+    http: &Client,
+    access_token: &str,
+    list_id: &str,
+    task_id: &str,
+) -> anyhow::Result<()> {
+    let url = format!("{GRAPH_BASE}/me/todo/lists/{list_id}/tasks/{task_id}");
+    let response = http.delete(url).bearer_auth(access_token).send().await?;
+    let status = response.status();
+
+    if delete_status_is_success(status) {
+        return Ok(());
+    }
+
+    response
+        .error_for_status()
+        .with_context(|| format!("failed to delete task {task_id} from list {list_id}"))?;
+    Ok(())
+}
+
+fn delete_status_is_success(status: StatusCode) -> bool {
+    status.is_success() || status == StatusCode::NOT_FOUND
+}
+
 async fn collect_pages<T>(
     http: &Client,
     access_token: &str,
@@ -154,4 +178,23 @@ fn date_time_time_zone(value: &str, time_zone: Option<&str>) -> serde_json::Valu
         "dateTime": value,
         "timeZone": time_zone.unwrap_or("UTC")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn delete_accepts_no_content_and_not_found() {
+        assert!(delete_status_is_success(StatusCode::NO_CONTENT));
+        assert!(delete_status_is_success(StatusCode::NOT_FOUND));
+    }
+
+    #[test]
+    fn delete_retries_auth_throttle_server_and_network_statuses() {
+        assert!(!delete_status_is_success(StatusCode::UNAUTHORIZED));
+        assert!(!delete_status_is_success(StatusCode::FORBIDDEN));
+        assert!(!delete_status_is_success(StatusCode::TOO_MANY_REQUESTS));
+        assert!(!delete_status_is_success(StatusCode::INTERNAL_SERVER_ERROR));
+    }
 }

@@ -413,6 +413,7 @@ function TaskDetailsWindow({ taskId, windowLabel }: { taskId: string | null; win
   const [taskLists, setTaskLists] = useState<TodoList[]>([]);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const taskList = taskLists.find((list) => list.id === task?.listId);
@@ -488,6 +489,26 @@ function TaskDetailsWindow({ taskId, windowLabel }: { taskId: string | null; win
     }
   }
 
+  async function handleDelete(nextTaskId: string) {
+    setDeleting(true);
+    setError(null);
+    try {
+      await api.deleteTask(nextTaskId);
+      try {
+        await emit("task-updated", { taskId: nextTaskId, deleted: true });
+      } catch (notificationError) {
+        console.warn("Task deleted, but the main window refresh notification failed", notificationError);
+      }
+      closeWindow();
+    } catch (deleteError) {
+      console.error("Failed to delete task locally", deleteError);
+      setError("details.deleteFailed");
+      throw deleteError;
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   function closeWindow() {
     const label = windowLabel || getCurrentWindow().label;
     void api.closeTaskDetailsWindow(label).catch(() => getCurrentWindow().close());
@@ -500,9 +521,11 @@ function TaskDetailsWindow({ taskId, windowLabel }: { taskId: string | null; win
         task={task}
         taskList={taskList}
         saving={saving}
+        deleting={deleting}
         error={error}
         onClose={closeWindow}
         onSave={handleSave}
+        onDelete={handleDelete}
       />
     </I18nProvider>
   );
@@ -513,20 +536,25 @@ function TaskDetailsWindowFrame({
   task,
   taskList,
   saving,
+  deleting,
   error,
   onClose,
   onSave,
+  onDelete,
 }: {
   settings: Settings;
   task: Task | null;
   taskList?: TodoList;
   saving: boolean;
+  deleting: boolean;
   error: string | null;
   onClose: () => void;
   onSave: (taskId: string, patch: TaskPatch) => Promise<void>;
+  onDelete: (taskId: string) => Promise<void>;
 }) {
   const { t } = useI18n();
-  const displayError = error === "details.resolveError" ? t("details.resolveError") : error;
+  const displayError =
+    error === "details.resolveError" || error === "details.deleteFailed" ? t(error) : error;
 
   return (
     <main
@@ -539,9 +567,11 @@ function TaskDetailsWindowFrame({
           task={task}
           taskList={taskList}
           saving={saving}
+          deleting={deleting}
           windowed
           onClose={onClose}
           onSave={onSave}
+          onDelete={onDelete}
         />
       ) : (
         <div className="details-loading">

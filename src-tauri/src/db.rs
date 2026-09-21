@@ -8,6 +8,12 @@ use crate::models::{SettingsDto, TaskDto, TaskListDto, TaskPatchDto};
 
 const TASK_COLUMNS: &str = "id, graph_id, list_id, title, status, importance, note, due_date_time, reminder_date_time, completed_date_time, time_zone, is_reminder_on, recurrence_json, created_at, modified_at, dirty";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeleteTaskDisposition {
+    LocalOnly,
+    RemotePending,
+}
+
 pub fn init_db(conn: &Connection) -> anyhow::Result<()> {
     conn.execute_batch(
         r#"
@@ -419,6 +425,93 @@ pub fn update_local_task(
     get_task(conn, task_id)
 }
 
+pub fn delete_local_task(
+    conn: &Connection,
+    task_id: &str,
+) -> anyhow::Result<DeleteTaskDisposition> {
+    let transaction = conn.unchecked_transaction()?;
+    let (graph_id, list_id): (Option<String>, String) = transaction
+        .query_row(
+            "SELECT graph_id, list_id FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .context("failed to resolve task for deletion")?;
+
+    transaction.execute(
+        "DELETE FROM pending_ops WHERE task_id = ?1",
+        params![task_id],
+    )?;
+
+    let disposition = if let Some(graph_id) = graph_id {
+        transaction.execute(
+            "UPDATE tasks
+             SET pending_delete = 1, dirty = 1, modified_at = ?2
+             WHERE id = ?1",
+            params![task_id, Utc::now().to_rfc3339()],
+        )?;
+        insert_pending_op(
+            &transaction,
+            "delete_task",
+            Some(task_id),
+            Some(&list_id),
+            &serde_json::json!({ "graphId": graph_id }).to_string(),
+        )?;
+        DeleteTaskDisposition::RemotePending
+    } else {
+        transaction.execute("DELETE FROM tasks WHERE id = ?1", params![task_id])?;
+        DeleteTaskDisposition::LocalOnly
+    };
+
+    transaction.commit()?;
+    Ok(disposition)
+}
+
+pub fn finalize_remote_task_delete(
+    conn: &Connection,
+    task_id: &str,
+    op_id: &str,
+) -> anyhow::Result<()> {
+    let transaction = conn.unchecked_transaction()?;
+    transaction.execute(
+        "DELETE FROM pending_ops WHERE task_id = ?1 OR op_id = ?2",
+        params![task_id, op_id],
+    )?;
+    transaction.execute("DELETE FROM tasks WHERE id = ?1", params![task_id])?;
+    transaction.commit()?;
+    Ok(())
+}
+
+pub fn queue_inflight_created_task_delete(
+    conn: &Connection,
+    task: &TaskDto,
+    graph_id: &str,
+) -> anyhow::Result<()> {
+    let transaction = conn.unchecked_transaction()?;
+    transaction.execute(
+        "INSERT INTO tasks (
+           id, graph_id, list_id, title, status, local_created_at, dirty, pending_delete
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, 1)",
+        params![
+            task.id,
+            graph_id,
+            task.list_id,
+            task.title,
+            task.status,
+            Utc::now().to_rfc3339()
+        ],
+    )?;
+    insert_pending_op(
+        &transaction,
+        "delete_task",
+        Some(&task.id),
+        Some(&task.list_id),
+        &serde_json::json!({ "graphId": graph_id }).to_string(),
+    )?;
+    transaction.commit()?;
+    Ok(())
+}
+
 pub fn get_task(conn: &Connection, task_id: &str) -> anyhow::Result<TaskDto> {
     conn.query_row(
         &format!("SELECT {TASK_COLUMNS} FROM tasks WHERE id = ?1"),
@@ -569,4 +662,178 @@ fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<TaskDto> {
         modified_at: row.get(14)?,
         dirty: row.get::<_, i64>(15)? != 0,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_db() -> Connection {
+        let conn = Connection::open_in_memory().expect("open test database");
+        init_db(&conn).expect("initialize test database");
+        ensure_local_core_lists(&conn).expect("initialize local lists");
+        conn
+    }
+
+    fn insert_remote_task(conn: &Connection, task_id: &str) {
+        upsert_task_list(conn, "remote-list", "Tasks", Some("inbox")).expect("insert remote list");
+        upsert_graph_task(
+            conn,
+            "remote-list",
+            task_id,
+            "Remote task",
+            "notStarted",
+            Some("normal"),
+            None,
+            None,
+            None,
+            None,
+            Some("UTC"),
+            false,
+            None,
+            None,
+            None,
+        )
+        .expect("insert remote task");
+    }
+
+    fn pending_types(conn: &Connection, task_id: &str) -> Vec<String> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT op_type FROM pending_ops WHERE task_id = ?1 ORDER BY created_at, op_id",
+            )
+            .expect("prepare pending query");
+        stmt.query_map(params![task_id], |row| row.get(0))
+            .expect("query pending operations")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect pending operations")
+    }
+
+    #[test]
+    fn local_only_delete_removes_task_and_all_pending_operations() {
+        let conn = test_db();
+        let task = insert_local_task(&conn, "Local task", "inbox").expect("insert local task");
+        complete_local_task(&conn, &task.id).expect("complete local task");
+
+        let disposition = delete_local_task(&conn, &task.id).expect("delete local task");
+
+        assert_eq!(disposition, DeleteTaskDisposition::LocalOnly);
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM tasks WHERE id = ?1",
+                params![task.id],
+                |row| row.get::<_, i64>(0)
+            )
+            .expect("count tasks"),
+            0
+        );
+        assert!(pending_types(&conn, &task.id).is_empty());
+    }
+
+    #[test]
+    fn remote_delete_replaces_update_and_complete_with_one_delete() {
+        let conn = test_db();
+        insert_remote_task(&conn, "remote-task");
+        let patch = TaskPatchDto {
+            title: "Updated".to_string(),
+            importance: Some("high".to_string()),
+            note: None,
+            due_date_time: None,
+            reminder_date_time: None,
+            time_zone: Some("UTC".to_string()),
+            is_reminder_on: false,
+            recurrence: None,
+        };
+        update_local_task(&conn, "remote-task", &patch).expect("update remote task locally");
+        complete_local_task(&conn, "remote-task").expect("complete remote task locally");
+
+        let disposition = delete_local_task(&conn, "remote-task").expect("delete remote task");
+
+        assert_eq!(disposition, DeleteTaskDisposition::RemotePending);
+        assert_eq!(pending_types(&conn, "remote-task"), vec!["delete_task"]);
+        assert_eq!(
+            conn.query_row(
+                "SELECT pending_delete FROM tasks WHERE id = ?1",
+                params!["remote-task"],
+                |row| row.get::<_, i64>(0)
+            )
+            .expect("read tombstone"),
+            1
+        );
+        assert!(list_tasks_for_list(&conn, "remote-list")
+            .expect("list visible tasks")
+            .is_empty());
+    }
+
+    #[test]
+    fn graph_pull_does_not_reveal_pending_delete_tombstone() {
+        let conn = test_db();
+        insert_remote_task(&conn, "remote-task");
+        delete_local_task(&conn, "remote-task").expect("delete remote task");
+
+        upsert_graph_task(
+            &conn,
+            "remote-list",
+            "remote-task",
+            "Still remote",
+            "notStarted",
+            Some("normal"),
+            None,
+            None,
+            None,
+            None,
+            Some("UTC"),
+            false,
+            None,
+            None,
+            None,
+        )
+        .expect("pull remote task");
+
+        assert!(list_tasks_for_list(&conn, "remote-list")
+            .expect("list visible tasks")
+            .is_empty());
+    }
+
+    #[test]
+    fn successful_remote_delete_finalizes_tombstone_and_outbox() {
+        let conn = test_db();
+        insert_remote_task(&conn, "remote-task");
+        delete_local_task(&conn, "remote-task").expect("delete remote task");
+        let op_id: String = conn
+            .query_row(
+                "SELECT op_id FROM pending_ops WHERE task_id = ?1",
+                params!["remote-task"],
+                |row| row.get(0),
+            )
+            .expect("read delete operation");
+
+        finalize_remote_task_delete(&conn, "remote-task", &op_id).expect("finalize remote delete");
+
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM tasks WHERE id = ?1",
+                params!["remote-task"],
+                |row| row.get::<_, i64>(0)
+            )
+            .expect("count tasks"),
+            0
+        );
+        assert!(pending_types(&conn, "remote-task").is_empty());
+    }
+
+    #[test]
+    fn in_flight_create_completion_is_queued_for_compensating_delete() {
+        let conn = test_db();
+        let task = insert_local_task(&conn, "Local task", "inbox").expect("insert local task");
+        delete_local_task(&conn, &task.id).expect("delete local task");
+
+        queue_inflight_created_task_delete(&conn, &task, "new-remote-id")
+            .expect("queue compensating delete");
+
+        assert_eq!(pending_types(&conn, &task.id), vec!["delete_task"]);
+        assert!(list_tasks_for_list(&conn, &task.list_id)
+            .expect("list visible tasks")
+            .is_empty());
+    }
 }
