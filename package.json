@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
     "build": "tsc && vite build",
-    "test:theme": "node --test --experimental-strip-types tests/themeRuntime.test.ts",
+    "test:theme": "node --test --experimental-strip-types tests/themeRuntime.test.ts tests/themeEditor.test.ts",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

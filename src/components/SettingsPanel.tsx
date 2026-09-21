@@ -1,4 +1,5 @@
-import { ExternalLink, LogIn, LogOut, Plus, RotateCcw, Trash2, UserCircle, X } from "lucide-react";
+import { ExternalLink, LogIn, LogOut, Palette, Plus, RotateCcw, Trash2, UserCircle, X } from "lucide-react";
+import { useState } from "react";
 import { localizeBackendMessage, useI18n } from "../lib/i18n";
 import type {
   AuthStatus,
@@ -8,7 +9,9 @@ import type {
   WidgetInstance,
   WidgetLayoutMode,
   WidgetTheme,
+  WidgetThemeInput,
 } from "../lib/types";
+import { ThemeManager } from "./ThemeManager";
 
 type Props = {
   open: boolean;
@@ -32,6 +35,9 @@ type Props = {
   onRenameWidget: (name: string) => void;
   onChangeLayout: (layoutMode: WidgetLayoutMode) => void;
   onChangeWidgetTheme: (themeId: string) => void;
+  onCreateTheme: (input: WidgetThemeInput) => Promise<WidgetTheme>;
+  onUpdateTheme: (id: string, input: WidgetThemeInput) => Promise<WidgetTheme>;
+  onDeleteTheme: (id: string) => Promise<void>;
   onAddPane: () => void;
   onSelectPaneList: (paneId: string, listId: string) => void;
   onChangePaneTheme: (paneId: string, themeId: string | null) => void;
@@ -60,12 +66,16 @@ export function SettingsPanel({
   onRenameWidget,
   onChangeLayout,
   onChangeWidgetTheme,
+  onCreateTheme,
+  onUpdateTheme,
+  onDeleteTheme,
   onAddPane,
   onSelectPaneList,
   onChangePaneTheme,
   onDeletePane,
 }: Props) {
   const { t } = useI18n();
+  const [themeManagerOpen, setThemeManagerOpen] = useState(false);
 
   if (!open) return null;
 
@@ -246,6 +256,14 @@ export function SettingsPanel({
               <option value="grid">{t("pane.layoutGrid")}</option>
             </select>
           </label>
+          <button
+            className="secondary-button theme-manager-entry"
+            type="button"
+            onClick={() => setThemeManagerOpen(true)}
+          >
+            <Palette size={15} />
+            {t("themeEditor.manageThemes")}
+          </button>
           <label className="settings-row">
             <span>{t("theme.windowTheme")}</span>
             <select
@@ -341,6 +359,17 @@ export function SettingsPanel({
         <RotateCcw size={16} />
         {t("settings.syncRemoteLists")}
       </button>
+
+      {themeManagerOpen ? (
+        <ThemeManager
+          themes={widgetThemes}
+          windowOpacity={settings.opacity}
+          onClose={() => setThemeManagerOpen(false)}
+          onCreate={onCreateTheme}
+          onUpdate={onUpdateTheme}
+          onDelete={onDeleteTheme}
+        />
+      ) : null}
     </aside>
   );
 }

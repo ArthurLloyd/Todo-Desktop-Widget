@@ -769,7 +769,7 @@ pub fn create_widget_theme(
     conn: &Connection,
     input: &WidgetThemeInput,
 ) -> anyhow::Result<WidgetThemeDto> {
-    let name = validate_name(&input.name, "theme name")?;
+    let name = validate_theme_name(&input.name)?;
     validate_theme_config(&input.config)?;
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
@@ -787,7 +787,20 @@ pub fn update_widget_theme(
     id: &str,
     input: &WidgetThemeInput,
 ) -> anyhow::Result<WidgetThemeDto> {
-    let name = validate_name(&input.name, "theme name")?;
+    let is_builtin: Option<bool> = conn
+        .query_row(
+            "SELECT is_builtin != 0 FROM widget_themes WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    match is_builtin {
+        None => bail!("widget theme not found"),
+        Some(true) => bail!("built-in widget themes cannot be updated"),
+        Some(false) => {}
+    }
+
+    let name = validate_theme_name(&input.name)?;
     validate_theme_config(&input.config)?;
     let changed = conn.execute(
         "UPDATE widget_themes SET name = ?2, config_json = ?3, updated_at = ?4 WHERE id = ?1",
@@ -1118,6 +1131,17 @@ fn validate_name(value: &str, field: &str) -> anyhow::Result<String> {
     Ok(value.to_string())
 }
 
+fn validate_theme_name(value: &str) -> anyhow::Result<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        bail!("theme name cannot be empty");
+    }
+    if value.chars().count() > 64 {
+        bail!("theme name must be at most 64 characters");
+    }
+    Ok(value.to_string())
+}
+
 fn normalize_optional_text(value: Option<&str>) -> Option<String> {
     value.and_then(|text| {
         let text = text.trim();
@@ -1326,6 +1350,93 @@ mod tests {
         let mut config = default_theme_config();
         config.background_opacity = 1.5;
         assert!(validate_theme_config(&config).is_err());
+    }
+
+    #[test]
+    fn built_in_theme_cannot_be_updated_or_deleted() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        let input = WidgetThemeInput {
+            name: "Changed".to_string(),
+            config: default_theme_config(),
+        };
+
+        let update_error = update_widget_theme(&conn, OCEAN_THEME_ID, &input).unwrap_err();
+        let delete_error = delete_widget_theme(&conn, OCEAN_THEME_ID).unwrap_err();
+
+        assert!(update_error.to_string().contains("cannot be updated"));
+        assert!(delete_error.to_string().contains("cannot be deleted"));
+        assert_eq!(
+            get_widget_theme(&conn, OCEAN_THEME_ID).unwrap().name,
+            "Ocean"
+        );
+    }
+
+    #[test]
+    fn custom_theme_can_be_created_and_updated() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        let created = create_widget_theme(
+            &conn,
+            &WidgetThemeInput {
+                name: "Study".to_string(),
+                config: default_theme_config(),
+            },
+        )
+        .expect("create custom theme");
+        let mut changed_config = created.config.clone();
+        changed_config.accent = "#A78BFA".to_string();
+
+        let updated = update_widget_theme(
+            &conn,
+            &created.id,
+            &WidgetThemeInput {
+                name: "Study Purple".to_string(),
+                config: changed_config,
+            },
+        )
+        .expect("update custom theme");
+
+        assert!(!updated.is_builtin);
+        assert_eq!(updated.id, created.id);
+        assert_eq!(updated.name, "Study Purple");
+        assert_eq!(updated.config.accent, "#A78BFA");
+    }
+
+    #[test]
+    fn theme_name_must_be_between_one_and_sixty_four_characters() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+
+        let empty = create_widget_theme(
+            &conn,
+            &WidgetThemeInput {
+                name: "   ".to_string(),
+                config: default_theme_config(),
+            },
+        )
+        .unwrap_err();
+        assert!(empty.to_string().contains("cannot be empty"));
+
+        let sixty_four = create_widget_theme(
+            &conn,
+            &WidgetThemeInput {
+                name: "a".repeat(64),
+                config: default_theme_config(),
+            },
+        )
+        .expect("accept 64-character theme name");
+        assert_eq!(sixty_four.name.chars().count(), 64);
+
+        let too_long = create_widget_theme(
+            &conn,
+            &WidgetThemeInput {
+                name: "a".repeat(65),
+                config: default_theme_config(),
+            },
+        )
+        .unwrap_err();
+        assert!(too_long.to_string().contains("at most 64"));
     }
 
     #[test]

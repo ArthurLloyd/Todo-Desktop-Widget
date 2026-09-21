@@ -525,36 +525,54 @@ pub fn get_widget_theme(state: State<'_, AppState>, id: String) -> Result<Widget
 
 #[tauri::command]
 pub fn create_widget_theme(
+    app: AppHandle,
     state: State<'_, AppState>,
     input: WidgetThemeInput,
 ) -> Result<WidgetThemeDto, String> {
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| "database lock poisoned".to_string())?;
-    widget_config::create_widget_theme(&conn, &input).map_err(to_string)
+    let theme = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::create_widget_theme(&conn, &input).map_err(to_string)?
+    };
+    emit_theme_definitions_changed(&app);
+    Ok(theme)
 }
 
 #[tauri::command]
 pub fn update_widget_theme(
+    app: AppHandle,
     state: State<'_, AppState>,
     id: String,
     input: WidgetThemeInput,
 ) -> Result<WidgetThemeDto, String> {
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| "database lock poisoned".to_string())?;
-    widget_config::update_widget_theme(&conn, &id, &input).map_err(to_string)
+    let theme = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::update_widget_theme(&conn, &id, &input).map_err(to_string)?
+    };
+    emit_theme_definitions_changed(&app);
+    Ok(theme)
 }
 
 #[tauri::command]
-pub fn delete_widget_theme(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| "database lock poisoned".to_string())?;
-    widget_config::delete_widget_theme(&conn, &id).map_err(to_string)
+pub fn delete_widget_theme(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::delete_widget_theme(&conn, &id).map_err(to_string)?;
+    }
+    emit_theme_definitions_changed(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -858,5 +876,11 @@ fn to_string(error: impl std::fmt::Display) -> String {
 fn emit_local_tasks_changed(app: &AppHandle) {
     if let Err(error) = app.emit("local-tasks-changed", ()) {
         eprintln!("[tasks] failed to emit local-tasks-changed: {error}");
+    }
+}
+
+fn emit_theme_definitions_changed(app: &AppHandle) {
+    if let Err(error) = app.emit("theme-definitions-changed", ()) {
+        eprintln!("[theme] failed to emit theme-definitions-changed: {error}");
     }
 }

@@ -17,6 +17,7 @@ import type {
   WidgetLayoutMode,
   WidgetPane,
   WidgetTheme,
+  WidgetThemeInput,
 } from "./lib/types";
 import { WidgetShell } from "./components/WidgetShell";
 import { TitleBar } from "./components/TitleBar";
@@ -144,6 +145,7 @@ function WidgetApp() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let unlistenConfig: (() => void) | undefined;
+    let unlistenThemes: (() => void) | undefined;
     void listen("local-tasks-changed", () => void refreshTaskData()).then((nextUnlisten) => {
       unlisten = nextUnlisten;
     });
@@ -155,9 +157,15 @@ function WidgetApp() {
     }).then((nextUnlisten) => {
       unlistenConfig = nextUnlisten;
     });
+    void listen("theme-definitions-changed", () => {
+      void reloadWidgetContext();
+    }).then((nextUnlisten) => {
+      unlistenThemes = nextUnlisten;
+    });
     return () => {
       unlisten?.();
       unlistenConfig?.();
+      unlistenThemes?.();
     };
   }, [refreshTaskData, reloadWidgetContext, reloadWidgetInstances]);
 
@@ -381,6 +389,23 @@ function WidgetApp() {
     }
   }
 
+  async function handleCreateTheme(input: WidgetThemeInput) {
+    const created = await api.createWidgetTheme(input);
+    await reloadWidgetContext();
+    return created;
+  }
+
+  async function handleUpdateTheme(id: string, input: WidgetThemeInput) {
+    const updated = await api.updateWidgetTheme(id, input);
+    await reloadWidgetContext();
+    return updated;
+  }
+
+  async function handleDeleteTheme(id: string) {
+    await api.deleteWidgetTheme(id);
+    await reloadWidgetContext();
+  }
+
   async function hideWindow() {
     await api.setWindowMode("hidden");
   }
@@ -467,6 +492,9 @@ function WidgetApp() {
         onRenameWidget={(name) => void handleWidgetRename(name)}
         onChangeLayout={(layoutMode) => void handleLayoutChange(layoutMode)}
         onChangeWidgetTheme={(themeId) => void handleWidgetThemeChange(themeId)}
+        onCreateTheme={handleCreateTheme}
+        onUpdateTheme={handleUpdateTheme}
+        onDeleteTheme={handleDeleteTheme}
         onAddPane={() => void handleAddPane()}
         onSelectPaneList={(paneId, listId) => void handleSelectPaneList(paneId, listId)}
         onChangePaneTheme={(paneId, themeId) => void handlePaneThemeChange(paneId, themeId)}
