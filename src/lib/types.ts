@@ -96,8 +96,20 @@ export type WidgetInstance = {
   name: string;
   layoutMode: WidgetLayoutMode;
   defaultThemeId?: string | null;
+  isPrimary: boolean;
+  isOpen: boolean;
+  pinned: boolean;
+  windowX?: number | null;
+  windowY?: number | null;
+  windowWidth?: number | null;
+  windowHeight?: number | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type WidgetContext = {
+  instance: WidgetInstance;
+  panes: WidgetPane[];
 };
 
 export type WidgetInstanceInput = {

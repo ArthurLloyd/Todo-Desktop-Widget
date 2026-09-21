@@ -1,28 +1,38 @@
 mod auth;
+#[cfg(not(test))]
 mod commands;
+#[cfg(not(test))]
 mod config;
 mod db;
+#[cfg(not(test))]
 mod debug_console;
+#[cfg(not(test))]
 mod desktop_window;
 mod graph;
+#[cfg(not(test))]
 mod hotkey;
 mod models;
 mod settings;
 mod sync;
 mod sync_coordinator;
+#[cfg(not(test))]
 mod tray;
 mod widget_config;
 mod widget_snapshot;
+#[cfg(not(test))]
+mod widget_window;
+mod widget_window_identity;
+mod window_state_map;
 
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
 
-use anyhow::Context;
 use models::SyncStatusDto;
 use rusqlite::Connection;
-use tauri::Manager;
+#[cfg(not(test))]
+use {anyhow::Context, tauri::Manager};
 
 pub struct AppState {
     pub db: Mutex<Connection>,
@@ -35,6 +45,7 @@ pub struct AppState {
     pub sync_coordinator: Arc<sync_coordinator::SyncCoordinator>,
 }
 
+#[cfg(not(test))]
 impl AppState {
     fn new(
         app: &tauri::App,
@@ -72,6 +83,7 @@ impl AppState {
     }
 }
 
+#[cfg(not(test))]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -79,31 +91,38 @@ pub fn run() {
         .setup(|app| {
             let sync_coordinator = Arc::new(sync_coordinator::SyncCoordinator::new());
             let state = AppState::new(app, Arc::clone(&sync_coordinator))?;
-            let restore_pinned = {
-                let conn = state
-                    .db
-                    .lock()
-                    .map_err(|_| anyhow::anyhow!("database lock poisoned during startup"))?;
-                db::load_settings(&conn)?.always_on_top
-            };
             app.manage(state);
             app.manage(Arc::clone(&sync_coordinator));
             app.manage(desktop_window::DesktopWindowState::default());
+            app.manage(widget_window::WidgetWindowRuntimeState::default());
             tray::init(app.handle())?;
             hotkey::init(app.handle())?;
             sync_coordinator.start_worker(app.handle().clone());
             sync_coordinator.request_global_sync(sync_coordinator::GlobalSyncReason::Startup);
-            if restore_pinned {
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    if let Err(error) =
-                        desktop_window::set_main_window_mode(&app_handle, "pinned").await
-                    {
-                        eprintln!("[desktop] failed to restore pinned mode at startup: {error}");
-                    }
-                });
-            }
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(widget_window::restore_widget_windows(app_handle));
             Ok(())
+        })
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
+                widget_window::schedule_geometry_persist(window.app_handle(), window.label());
+            }
+            tauri::WindowEvent::CloseRequested { api, .. }
+                if widget_window::should_intercept_close(window.app_handle(), window.label()) =>
+            {
+                api.prevent_close();
+                if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(error) = widget_window::close_secondary_widget(&webview).await {
+                            eprintln!("[widget-window] close failed: {error}");
+                        }
+                    });
+                }
+            }
+            tauri::WindowEvent::Destroyed => {
+                widget_window::clear_closed_window_state(window.app_handle(), window.label());
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_today_tasks,
@@ -142,6 +161,11 @@ pub fn run() {
             commands::update_widget_theme,
             commands::delete_widget_theme,
             commands::resolve_widget_pane_theme,
+            commands::get_current_widget_context,
+            commands::create_widget_window,
+            commands::open_widget_window,
+            commands::close_current_widget_window,
+            commands::update_current_widget_list,
             commands::set_window_mode,
             commands::start_drag,
             commands::start_window_drag

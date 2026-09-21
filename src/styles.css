@@ -1011,6 +1011,39 @@ button {
   background: rgba(148, 163, 184, 0.16);
 }
 
+.widget-manager {
+  display: grid;
+  align-items: stretch;
+}
+
+.settings-group .widget-manager__heading,
+.settings-group .widget-manager__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.widget-manager__list {
+  display: grid;
+  gap: 6px;
+}
+
+.widget-manager__item {
+  min-height: 34px;
+  padding: 5px 0;
+  border-top: 1px solid var(--border);
+}
+
+.widget-manager__item:first-child {
+  border-top: 0;
+}
+
+.widget-manager .text-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .quick-add {
   position: absolute;
   top: 50%;

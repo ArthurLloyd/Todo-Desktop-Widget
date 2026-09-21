@@ -31,6 +31,13 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
           name TEXT NOT NULL,
           layout_mode TEXT NOT NULL CHECK (layout_mode IN ('single', 'columns', 'rows', 'grid')),
           default_theme_id TEXT NULL REFERENCES widget_themes(id) ON DELETE SET NULL,
+          is_primary INTEGER NOT NULL DEFAULT 0,
+          is_open INTEGER NOT NULL DEFAULT 0,
+          pinned INTEGER NOT NULL DEFAULT 0,
+          window_x INTEGER NULL,
+          window_y INTEGER NULL,
+          window_width INTEGER NULL,
+          window_height INTEGER NULL,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
@@ -53,6 +60,22 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
         "#,
     )
     .context("failed to initialize widget configuration schema")?;
+    for (name, definition) in [
+        ("is_primary", "INTEGER NOT NULL DEFAULT 0"),
+        ("is_open", "INTEGER NOT NULL DEFAULT 0"),
+        ("pinned", "INTEGER NOT NULL DEFAULT 0"),
+        ("window_x", "INTEGER NULL"),
+        ("window_y", "INTEGER NULL"),
+        ("window_width", "INTEGER NULL"),
+        ("window_height", "INTEGER NULL"),
+    ] {
+        ensure_widget_instance_column(conn, name, definition)?;
+    }
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_widget_instances_one_primary
+         ON widget_instances(is_primary) WHERE is_primary = 1",
+        [],
+    )?;
     Ok(())
 }
 
@@ -78,8 +101,9 @@ pub fn bootstrap_defaults(conn: &Connection) -> anyhow::Result<()> {
     let widget_created = if instance_count == 0 {
         transaction.execute(
             "INSERT INTO widget_instances
-             (id, name, layout_mode, default_theme_id, created_at, updated_at)
-             VALUES (?1, 'Main', 'single', ?2, ?3, ?3)",
+             (id, name, layout_mode, default_theme_id, is_primary, is_open, pinned,
+              created_at, updated_at)
+             VALUES (?1, 'Main', 'single', ?2, 1, 1, 0, ?3, ?3)",
             params![DEFAULT_WIDGET_ID, DEFAULT_THEME_ID, now],
         )? > 0
     } else {
@@ -112,6 +136,7 @@ pub fn bootstrap_defaults(conn: &Connection) -> anyhow::Result<()> {
         false
     };
 
+    ensure_primary_and_migrate_legacy_pinned(&transaction)?;
     transaction.commit()?;
 
     if theme_created {
@@ -183,8 +208,9 @@ pub fn parse_layout_mode(value: &str) -> anyhow::Result<WidgetLayoutMode> {
 
 pub fn list_widget_instances(conn: &Connection) -> anyhow::Result<Vec<WidgetInstanceDto>> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, layout_mode, default_theme_id, created_at, updated_at
-         FROM widget_instances ORDER BY created_at, id",
+        "SELECT id, name, layout_mode, default_theme_id, is_primary, is_open, pinned,
+                window_x, window_y, window_width, window_height, created_at, updated_at
+         FROM widget_instances ORDER BY is_primary DESC, created_at, id",
     )?;
     let mut rows = stmt.query([])?;
     let mut instances = Vec::new();
@@ -196,12 +222,154 @@ pub fn list_widget_instances(conn: &Connection) -> anyhow::Result<Vec<WidgetInst
 
 pub fn get_widget_instance(conn: &Connection, id: &str) -> anyhow::Result<WidgetInstanceDto> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, layout_mode, default_theme_id, created_at, updated_at
+        "SELECT id, name, layout_mode, default_theme_id, is_primary, is_open, pinned,
+                window_x, window_y, window_width, window_height, created_at, updated_at
          FROM widget_instances WHERE id = ?1",
     )?;
     let mut rows = stmt.query(params![id])?;
     let row = rows.next()?.context("widget instance not found")?;
     widget_instance_from_row(row)
+}
+
+pub fn get_primary_widget_instance(conn: &Connection) -> anyhow::Result<WidgetInstanceDto> {
+    let id: String = conn
+        .query_row(
+            "SELECT id FROM widget_instances WHERE is_primary = 1 LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .context("primary widget instance not found")?;
+    get_widget_instance(conn, &id)
+}
+
+pub fn list_open_secondary_widgets(conn: &Connection) -> anyhow::Result<Vec<WidgetInstanceDto>> {
+    Ok(list_widget_instances(conn)?
+        .into_iter()
+        .filter(|instance| !instance.is_primary && instance.is_open)
+        .collect())
+}
+
+pub fn create_widget_with_default_pane(
+    conn: &Connection,
+    initial_list_id: Option<&str>,
+) -> anyhow::Result<WidgetInstanceDto> {
+    let transaction = conn.unchecked_transaction()?;
+    let list_id = normalize_optional_text(initial_list_id);
+    let list_name = if let Some(list_id) = list_id.as_deref() {
+        transaction
+            .query_row(
+                "SELECT display_name FROM task_lists WHERE id = ?1",
+                params![list_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .context("initial task list not found")?
+            .into()
+    } else {
+        None
+    };
+    let base_name = list_name.unwrap_or_else(|| "Widget".to_string());
+    let name = next_available_widget_name(&transaction, &base_name)?;
+    let id = Uuid::new_v4().to_string();
+    let pane_id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+
+    transaction.execute(
+        "INSERT INTO widget_instances
+         (id, name, layout_mode, default_theme_id, is_primary, is_open, pinned,
+          created_at, updated_at)
+         VALUES (?1, ?2, 'single', ?3, 0, 1, 0, ?4, ?4)",
+        params![id, name, DEFAULT_THEME_ID, now],
+    )?;
+    transaction.execute(
+        "INSERT INTO widget_panes
+         (id, widget_instance_id, list_id, title_override, theme_id, sort_order,
+          show_completed, max_tasks, created_at, updated_at)
+         VALUES (?1, ?2, ?3, NULL, NULL, 0, NULL, NULL, ?4, ?4)",
+        params![pane_id, id, list_id, now],
+    )?;
+    transaction.commit()?;
+    get_widget_instance(conn, &id)
+}
+
+pub fn set_widget_open(conn: &Connection, id: &str, is_open: bool) -> anyhow::Result<()> {
+    let instance = get_widget_instance(conn, id)?;
+    let is_open = instance.is_primary || is_open;
+    conn.execute(
+        "UPDATE widget_instances SET is_open = ?2, updated_at = ?3 WHERE id = ?1",
+        params![id, i64::from(is_open), Utc::now().to_rfc3339()],
+    )?;
+    Ok(())
+}
+
+pub fn set_widget_pinned(conn: &Connection, id: &str, pinned: bool) -> anyhow::Result<()> {
+    if conn.execute(
+        "UPDATE widget_instances SET pinned = ?2, updated_at = ?3 WHERE id = ?1",
+        params![id, i64::from(pinned), Utc::now().to_rfc3339()],
+    )? == 0
+    {
+        bail!("widget instance not found");
+    }
+    Ok(())
+}
+
+pub fn save_widget_geometry(
+    conn: &Connection,
+    id: &str,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> anyhow::Result<()> {
+    if width < 1 || height < 1 {
+        bail!("widget window size must be positive");
+    }
+    if conn.execute(
+        "UPDATE widget_instances
+         SET window_x = ?2, window_y = ?3, window_width = ?4, window_height = ?5,
+             updated_at = ?6
+         WHERE id = ?1",
+        params![
+            id,
+            x,
+            y,
+            i64::from(width),
+            i64::from(height),
+            Utc::now().to_rfc3339()
+        ],
+    )? == 0
+    {
+        bail!("widget instance not found");
+    }
+    Ok(())
+}
+
+pub fn update_first_pane_list(
+    conn: &Connection,
+    widget_instance_id: &str,
+    list_id: &str,
+) -> anyhow::Result<WidgetPaneDto> {
+    let exists: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM task_lists WHERE id = ?1)",
+        params![list_id],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        bail!("task list not found");
+    }
+    let pane_id: String = conn
+        .query_row(
+            "SELECT id FROM widget_panes WHERE widget_instance_id = ?1
+             ORDER BY sort_order, id LIMIT 1",
+            params![widget_instance_id],
+            |row| row.get(0),
+        )
+        .context("widget pane not found")?;
+    conn.execute(
+        "UPDATE widget_panes SET list_id = ?2, updated_at = ?3 WHERE id = ?1",
+        params![pane_id, list_id, Utc::now().to_rfc3339()],
+    )?;
+    get_widget_pane(conn, &pane_id)
 }
 
 pub fn create_widget_instance(
@@ -214,8 +382,9 @@ pub fn create_widget_instance(
     let now = Utc::now().to_rfc3339();
     conn.execute(
         "INSERT INTO widget_instances
-         (id, name, layout_mode, default_theme_id, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+         (id, name, layout_mode, default_theme_id, is_primary, is_open, pinned,
+          created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?5)",
         params![
             id,
             name,
@@ -254,6 +423,17 @@ pub fn update_widget_instance(
 
 pub fn delete_widget_instance(conn: &Connection, id: &str) -> anyhow::Result<()> {
     let transaction = conn.unchecked_transaction()?;
+    let is_primary: bool = transaction
+        .query_row(
+            "SELECT is_primary != 0 FROM widget_instances WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .optional()?
+        .context("widget instance not found")?;
+    if is_primary {
+        bail!("the primary widget instance cannot be deleted");
+    }
     transaction.execute(
         "DELETE FROM widget_panes WHERE widget_instance_id = ?1",
         params![id],
@@ -470,6 +650,99 @@ fn get_widget_pane(conn: &Connection, id: &str) -> anyhow::Result<WidgetPaneDto>
     widget_pane_from_row(row)
 }
 
+fn next_available_widget_name(conn: &Connection, base: &str) -> anyhow::Result<String> {
+    let exists = |candidate: &str| -> anyhow::Result<bool> {
+        Ok(conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM widget_instances WHERE name = ?1)",
+            params![candidate],
+            |row| row.get(0),
+        )?)
+    };
+    if !exists(base)? {
+        return Ok(base.to_string());
+    }
+    for suffix in 2..=10_000 {
+        let candidate = format!("{base} {suffix}");
+        if !exists(&candidate)? {
+            return Ok(candidate);
+        }
+    }
+    bail!("unable to allocate a unique widget name")
+}
+
+fn ensure_widget_instance_column(
+    conn: &Connection,
+    name: &str,
+    definition: &str,
+) -> anyhow::Result<()> {
+    let exists = conn
+        .prepare("PRAGMA table_info(widget_instances)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?
+        .iter()
+        .any(|column| column == name);
+    if !exists {
+        conn.execute(
+            &format!("ALTER TABLE widget_instances ADD COLUMN {name} {definition}"),
+            [],
+        )?;
+    }
+    Ok(())
+}
+
+fn ensure_primary_and_migrate_legacy_pinned(conn: &Connection) -> anyhow::Result<()> {
+    let primary_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM widget_instances WHERE is_primary = 1",
+        [],
+        |row| row.get(0),
+    )?;
+    if primary_count == 0 {
+        let primary_id: String = conn
+            .query_row(
+                "SELECT id FROM widget_instances
+                 ORDER BY CASE WHEN id = ?1 THEN 0 ELSE 1 END, created_at, id LIMIT 1",
+                params![DEFAULT_WIDGET_ID],
+                |row| row.get(0),
+            )
+            .context("cannot select a primary widget from an empty configuration")?;
+        conn.execute(
+            "UPDATE widget_instances SET is_primary = 1, is_open = 1 WHERE id = ?1",
+            params![primary_id],
+        )?;
+    }
+    conn.execute(
+        "UPDATE widget_instances SET is_open = 1 WHERE is_primary = 1",
+        [],
+    )?;
+
+    let migrated: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM settings WHERE key = 'widget_window_state_v1_migrated')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !migrated {
+        let legacy_pinned = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'settings'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            .and_then(|value| value.get("alwaysOnTop").and_then(|item| item.as_bool()))
+            .unwrap_or(false);
+        conn.execute(
+            "UPDATE widget_instances SET pinned = ?1 WHERE is_primary = 1",
+            params![i64::from(legacy_pinned)],
+        )?;
+        conn.execute(
+            "INSERT INTO settings(key, value) VALUES ('widget_window_state_v1_migrated', '1')",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
 fn get_widget_theme_optional(
     conn: &Connection,
     id: &str,
@@ -489,8 +762,19 @@ fn widget_instance_from_row(row: &Row<'_>) -> anyhow::Result<WidgetInstanceDto> 
         name: row.get(1)?,
         layout_mode: parse_layout_mode(&layout_mode)?,
         default_theme_id: row.get(3)?,
-        created_at: row.get(4)?,
-        updated_at: row.get(5)?,
+        is_primary: row.get::<_, i64>(4)? != 0,
+        is_open: row.get::<_, i64>(5)? != 0,
+        pinned: row.get::<_, i64>(6)? != 0,
+        window_x: row.get(7)?,
+        window_y: row.get(8)?,
+        window_width: row
+            .get::<_, Option<i64>>(9)?
+            .and_then(|value| u32::try_from(value).ok()),
+        window_height: row
+            .get::<_, Option<i64>>(10)?
+            .and_then(|value| u32::try_from(value).ok()),
+        created_at: row.get(11)?,
+        updated_at: row.get(12)?,
     })
 }
 
@@ -741,10 +1025,12 @@ mod tests {
         let conn = test_db();
         bootstrap_defaults(&conn).expect("bootstrap defaults");
         let task = db::insert_local_task(&conn, "Keep me", "inbox").expect("insert task");
+        let secondary = create_widget_with_default_pane(&conn, Some("local-inbox"))
+            .expect("create secondary widget");
 
-        delete_widget_instance(&conn, DEFAULT_WIDGET_ID).expect("delete widget");
+        delete_widget_instance(&conn, &secondary.id).expect("delete widget");
 
-        assert!(list_widget_panes(&conn, DEFAULT_WIDGET_ID)
+        assert!(list_widget_panes(&conn, &secondary.id)
             .expect("list panes")
             .is_empty());
         assert!(db::get_task(&conn, &task.id).is_ok());
@@ -889,6 +1175,154 @@ mod tests {
                 .expect("resolve default theme")
                 .id,
             DEFAULT_THEME_ID
+        );
+    }
+
+    #[test]
+    fn bootstrap_has_exactly_one_open_primary() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        create_widget_with_default_pane(&conn, None).expect("create secondary");
+        let instances = list_widget_instances(&conn).expect("list instances");
+        assert_eq!(instances.iter().filter(|item| item.is_primary).count(), 1);
+        assert!(
+            instances
+                .iter()
+                .find(|item| item.is_primary)
+                .unwrap()
+                .is_open
+        );
+    }
+
+    #[test]
+    fn primary_widget_cannot_be_deleted() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        let error = delete_widget_instance(&conn, DEFAULT_WIDGET_ID).unwrap_err();
+        assert!(error.to_string().contains("primary"));
+    }
+
+    #[test]
+    fn high_level_secondary_creation_is_open_with_one_pane() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        let secondary =
+            create_widget_with_default_pane(&conn, Some("local-inbox")).expect("create secondary");
+        assert!(!secondary.is_primary);
+        assert!(secondary.is_open);
+        let panes = list_widget_panes(&conn, &secondary.id).expect("list panes");
+        assert_eq!(panes.len(), 1);
+        assert_eq!(panes[0].list_id.as_deref(), Some("local-inbox"));
+    }
+
+    #[test]
+    fn window_state_fields_persist_independently() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        let secondary = create_widget_with_default_pane(&conn, None).expect("create secondary");
+        set_widget_open(&conn, &secondary.id, false).expect("close secondary");
+        set_widget_pinned(&conn, &secondary.id, true).expect("pin secondary");
+        save_widget_geometry(&conn, &secondary.id, 120, -40, 420, 650).expect("save geometry");
+
+        let stored = get_widget_instance(&conn, &secondary.id).expect("load secondary");
+        assert!(!stored.is_open);
+        assert!(stored.pinned);
+        assert_eq!((stored.window_x, stored.window_y), (Some(120), Some(-40)));
+        assert_eq!(
+            (stored.window_width, stored.window_height),
+            (Some(420), Some(650))
+        );
+        assert!(!get_primary_widget_instance(&conn).unwrap().pinned);
+    }
+
+    #[test]
+    fn changing_secondary_pane_list_does_not_change_primary() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        update_first_pane_list(&conn, DEFAULT_WIDGET_ID, "local-inbox").expect("bind primary");
+        let secondary =
+            create_widget_with_default_pane(&conn, Some("local-inbox")).expect("create secondary");
+        update_first_pane_list(&conn, &secondary.id, "local-today").expect("change secondary");
+
+        assert_eq!(
+            list_widget_panes(&conn, DEFAULT_WIDGET_ID).unwrap()[0]
+                .list_id
+                .as_deref(),
+            Some("local-inbox")
+        );
+        assert_eq!(
+            list_widget_panes(&conn, &secondary.id).unwrap()[0]
+                .list_id
+                .as_deref(),
+            Some("local-today")
+        );
+    }
+
+    #[test]
+    fn legacy_always_on_top_seeds_primary_pinned_once() {
+        let conn = test_db();
+        db::save_settings(
+            &conn,
+            &crate::models::SettingsDto {
+                always_on_top: true,
+                ..Default::default()
+            },
+        )
+        .expect("save legacy settings");
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        assert!(get_primary_widget_instance(&conn).unwrap().pinned);
+
+        db::save_settings(&conn, &crate::models::SettingsDto::default())
+            .expect("change legacy settings");
+        bootstrap_defaults(&conn).expect("repeat bootstrap");
+        assert!(get_primary_widget_instance(&conn).unwrap().pinned);
+    }
+
+    #[test]
+    fn four_a_schema_migrates_idempotently() {
+        let conn = Connection::open_in_memory().expect("open legacy database");
+        conn.execute_batch(
+            r#"
+            CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO settings(key, value) VALUES
+              ('settings', '{"alwaysOnTop":true}');
+            CREATE TABLE widget_themes (
+              id TEXT PRIMARY KEY, name TEXT NOT NULL, config_json TEXT NOT NULL,
+              is_builtin INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            );
+            CREATE TABLE widget_instances (
+              id TEXT PRIMARY KEY, name TEXT NOT NULL, layout_mode TEXT NOT NULL,
+              default_theme_id TEXT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            );
+            CREATE TABLE widget_panes (
+              id TEXT PRIMARY KEY, widget_instance_id TEXT NOT NULL, list_id TEXT NULL,
+              title_override TEXT NULL, theme_id TEXT NULL, sort_order INTEGER NOT NULL,
+              show_completed INTEGER NULL, max_tasks INTEGER NULL,
+              created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            );
+            INSERT INTO widget_instances
+              (id, name, layout_mode, default_theme_id, created_at, updated_at)
+              VALUES ('main', 'Main', 'single', NULL, '2026-01-01', '2026-01-01');
+            "#,
+        )
+        .expect("create 4A schema");
+
+        init_schema(&conn).expect("first migration");
+        bootstrap_defaults(&conn).expect("first bootstrap");
+        init_schema(&conn).expect("second migration");
+        bootstrap_defaults(&conn).expect("second bootstrap");
+
+        let primary = get_primary_widget_instance(&conn).expect("load primary");
+        assert_eq!(primary.id, DEFAULT_WIDGET_ID);
+        assert!(primary.is_open);
+        assert!(primary.pinned);
+        assert_eq!(
+            list_widget_instances(&conn)
+                .unwrap()
+                .iter()
+                .filter(|instance| instance.is_primary)
+                .count(),
+            1
         );
     }
 }

@@ -168,6 +168,13 @@ pub struct WidgetInstanceDto {
     pub name: String,
     pub layout_mode: WidgetLayoutMode,
     pub default_theme_id: Option<String>,
+    pub is_primary: bool,
+    pub is_open: bool,
+    pub pinned: bool,
+    pub window_x: Option<i32>,
+    pub window_y: Option<i32>,
+    pub window_width: Option<u32>,
+    pub window_height: Option<u32>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -205,6 +212,13 @@ pub struct WidgetPaneInput {
     pub sort_order: i64,
     pub show_completed: Option<bool>,
     pub max_tasks: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetContextDto {
+    pub instance: WidgetInstanceDto,
+    pub panes: Vec<WidgetPaneDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]

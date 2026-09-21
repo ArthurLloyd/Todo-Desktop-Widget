@@ -2,9 +2,11 @@ use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, WebviewWindow};
 
+use crate::window_state_map::WindowStateMap;
+
 #[derive(Clone, Debug)]
 struct DesktopOwnerAttachment {
-    main_hwnd: isize,
+    window_hwnd: isize,
     host_hwnd: isize,
     def_view_hwnd: isize,
     original_owner: isize,
@@ -12,69 +14,62 @@ struct DesktopOwnerAttachment {
 }
 
 #[derive(Default)]
-struct DesktopWindowStatus {
-    attachment: Option<DesktopOwnerAttachment>,
-    pinned: bool,
-}
-
-#[derive(Default)]
 pub struct DesktopWindowState {
-    status: Mutex<DesktopWindowStatus>,
+    windows: Mutex<WindowStateMap<DesktopOwnerAttachment>>,
 }
 
-pub async fn set_main_window_mode(app: &AppHandle, mode: &str) -> Result<(), String> {
-    eprintln!("[desktop] requested mode = {mode}");
-    eprintln!("[desktop] state.pinned before = {}", pinned_state(app)?);
+pub async fn set_widget_window_mode(window: &WebviewWindow, mode: &str) -> Result<(), String> {
+    let label = window.label();
+    eprintln!("[desktop] window={label} requested mode = {mode}");
+    eprintln!(
+        "[desktop] window={label} state.pinned before = {}",
+        pinned_state(window.app_handle(), label)?
+    );
 
     let result = match mode {
-        "pinned" => pin_main_window(app).await,
-        "normal" => restore_normal_window(app).await,
-        "hidden" => hide_main_window(app),
+        "pinned" => pin_widget_window(window).await,
+        "normal" => restore_normal_window(window).await,
+        "hidden" => hide_widget_window(window),
         _ => Err(format!("unsupported window mode: {mode}")),
     };
 
-    match pinned_state(app) {
-        Ok(pinned) => eprintln!("[desktop] state.pinned after = {pinned}"),
+    match pinned_state(window.app_handle(), label) {
+        Ok(pinned) => eprintln!("[desktop] window={label} state.pinned after = {pinned}"),
         Err(error) => eprintln!("[desktop] failed to read state after mode change: {error}"),
     }
 
     result
 }
 
-pub fn is_owner_attached(app: &AppHandle) -> bool {
+pub fn is_owner_attached(app: &AppHandle, label: &str) -> bool {
     app.try_state::<DesktopWindowState>()
         .and_then(|state| {
             state
-                .status
+                .windows
                 .lock()
                 .ok()
-                .map(|status| status.attachment.is_some())
+                .map(|windows| windows.is_attached(label))
         })
         .unwrap_or(false)
 }
 
-pub fn is_pinned(app: &AppHandle) -> bool {
-    pinned_state(app).unwrap_or(false)
-}
-
-pub fn show_main_window(app: &AppHandle) -> Result<(), String> {
-    let window = main_window(app)?;
+pub fn show_widget_window(window: &WebviewWindow) -> Result<(), String> {
     window.show().map_err(to_string)?;
 
-    if let Some(attachment) = current_attachment(app)? {
+    if let Some(attachment) = current_attachment(window.app_handle(), window.label())? {
         if let Err(error) = platform::validate_desktop_owner(&attachment) {
             eprintln!("[desktop] owner validation failed after show: {error}");
-            if pinned_state(app)? {
-                return enable_bottom_fallback(&window);
+            if pinned_state(window.app_handle(), window.label())? {
+                return enable_bottom_fallback(window);
             }
         }
     }
 
-    enforce_main_window_z_order(app)
+    enforce_widget_window_z_order(window)
 }
 
-pub fn hide_main_window(app: &AppHandle) -> Result<(), String> {
-    main_window(app)?.hide().map_err(to_string)
+pub fn hide_widget_window(window: &WebviewWindow) -> Result<(), String> {
+    window.hide().map_err(to_string)
 }
 
 pub fn enable_bottom_fallback(window: &WebviewWindow) -> Result<(), String> {
@@ -85,14 +80,15 @@ pub fn enable_bottom_fallback(window: &WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
-pub fn enforce_main_window_z_order(app: &AppHandle) -> Result<(), String> {
-    let window = main_window(app)?;
-    let pinned = pinned_state(app)?;
-    let attachment_exists = current_attachment(app)?.is_some();
+pub fn enforce_widget_window_z_order(window: &WebviewWindow) -> Result<(), String> {
+    let app = window.app_handle();
+    let label = window.label();
+    let pinned = pinned_state(app, label)?;
+    let attachment_exists = current_attachment(app, label)?.is_some();
 
-    eprintln!("[desktop] enforce requested");
-    eprintln!("[desktop] pinned = {pinned}");
-    eprintln!("[desktop] attachment exists = {attachment_exists}");
+    eprintln!("[desktop] window={label} enforce requested");
+    eprintln!("[desktop] window={label} pinned = {pinned}");
+    eprintln!("[desktop] window={label} attachment exists = {attachment_exists}");
 
     if pinned {
         window.set_always_on_top(false).map_err(to_string)?;
@@ -103,12 +99,21 @@ pub fn enforce_main_window_z_order(app: &AppHandle) -> Result<(), String> {
     }
 }
 
-async fn pin_main_window(app: &AppHandle) -> Result<(), String> {
-    let window = main_window(app)?;
+pub fn remove_window_state(app: &AppHandle, label: &str) {
+    if let Some(state) = app.try_state::<DesktopWindowState>() {
+        if let Ok(mut windows) = state.windows.lock() {
+            windows.remove(label);
+        }
+    }
+}
 
-    if is_owner_attached(app) {
-        mark_pinned(app, true)?;
-        return show_main_window(app);
+async fn pin_widget_window(window: &WebviewWindow) -> Result<(), String> {
+    let app = window.app_handle();
+    let label = window.label().to_string();
+
+    if is_owner_attached(app, &label) {
+        mark_pinned(app, &label, true)?;
+        return show_widget_window(window);
     }
 
     window.set_always_on_top(false).map_err(to_string)?;
@@ -125,37 +130,38 @@ async fn pin_main_window(app: &AppHandle) -> Result<(), String> {
             let state = app
                 .try_state::<DesktopWindowState>()
                 .ok_or_else(|| "desktop window state is not initialized".to_string())?;
-            let mut status = state
-                .status
+            let mut windows = state
+                .windows
                 .lock()
                 .map_err(|_| "desktop window state lock poisoned".to_string())?;
-            status.attachment = Some(attachment);
-            status.pinned = true;
-            drop(status);
+            windows.set_attachment(&label, Some(attachment));
+            windows.set_pinned(&label, true);
+            drop(windows);
 
-            enforce_main_window_z_order(app)?;
+            enforce_widget_window_z_order(window)?;
             window.show().map_err(to_string)?;
             platform::log_dpi_after_always_on_bottom(&dpi_attachment)
         }
         Err(error) => {
             eprintln!("[desktop] owner attach failed: {error}");
-            mark_pinned(app, true)?;
+            mark_pinned(app, &label, true)?;
             enable_bottom_fallback(&window)
         }
     }
 }
 
-async fn restore_normal_window(app: &AppHandle) -> Result<(), String> {
-    let window = main_window(app)?;
-    let attachment = current_attachment(app)?;
-    mark_pinned(app, false)?;
+async fn restore_normal_window(window: &WebviewWindow) -> Result<(), String> {
+    let app = window.app_handle();
+    let label = window.label().to_string();
+    let attachment = current_attachment(app, &label)?;
+    mark_pinned(app, &label, false)?;
 
     if let Some(attachment) = attachment {
         if let Err(error) =
             run_on_main_thread(&window, move || platform::detach_desktop_owner(&attachment)).await
         {
-            mark_pinned(app, true)?;
-            if let Err(enforce_error) = enforce_main_window_z_order(app) {
+            mark_pinned(app, &label, true)?;
+            if let Err(enforce_error) = enforce_widget_window_z_order(window) {
                 eprintln!(
                     "[desktop] failed to restore pinned Z-order after detach error: {enforce_error}"
                 );
@@ -166,11 +172,11 @@ async fn restore_normal_window(app: &AppHandle) -> Result<(), String> {
         let state = app
             .try_state::<DesktopWindowState>()
             .ok_or_else(|| "desktop window state is not initialized".to_string())?;
-        let mut status = state
-            .status
+        let mut windows = state
+            .windows
             .lock()
             .map_err(|_| "desktop window state lock poisoned".to_string())?;
-        status.attachment = None;
+        windows.set_attachment(&label, None);
     }
 
     window.set_always_on_bottom(false).map_err(to_string)?;
@@ -183,57 +189,51 @@ async fn restore_normal_window(app: &AppHandle) -> Result<(), String> {
     })
     .await?;
 
-    eprintln!("[desktop] normal mode final:");
-    eprintln!("[desktop] owner = {actual_owner}");
-    eprintln!("[desktop] pinned = {}", pinned_state(app)?);
-    eprintln!("[desktop] bottom requested = false");
+    eprintln!("[desktop] window={label} normal mode final:");
+    eprintln!("[desktop] window={label} owner = {actual_owner}");
+    eprintln!(
+        "[desktop] window={label} pinned = {}",
+        pinned_state(app, &label)?
+    );
+    eprintln!("[desktop] window={label} bottom requested = false");
     Ok(())
 }
 
-fn current_attachment(app: &AppHandle) -> Result<Option<DesktopOwnerAttachment>, String> {
+fn current_attachment(
+    app: &AppHandle,
+    label: &str,
+) -> Result<Option<DesktopOwnerAttachment>, String> {
     let state = app
         .try_state::<DesktopWindowState>()
         .ok_or_else(|| "desktop window state is not initialized".to_string())?;
-    let status = state
-        .status
+    let windows = state
+        .windows
         .lock()
         .map_err(|_| "desktop window state lock poisoned".to_string())?;
-    Ok(status.attachment.clone())
+    Ok(windows.attachment(label))
 }
 
-fn mark_pinned(app: &AppHandle, pinned: bool) -> Result<(), String> {
+fn mark_pinned(app: &AppHandle, label: &str, pinned: bool) -> Result<(), String> {
     let state = app
         .try_state::<DesktopWindowState>()
         .ok_or_else(|| "desktop window state is not initialized".to_string())?;
-    let mut status = state
-        .status
+    let mut windows = state
+        .windows
         .lock()
         .map_err(|_| "desktop window state lock poisoned".to_string())?;
-    status.pinned = pinned;
+    windows.set_pinned(label, pinned);
     Ok(())
 }
 
-fn pinned_state(app: &AppHandle) -> Result<bool, String> {
+fn pinned_state(app: &AppHandle, label: &str) -> Result<bool, String> {
     let state = app
         .try_state::<DesktopWindowState>()
         .ok_or_else(|| "desktop window state is not initialized".to_string())?;
-    let status = state
-        .status
+    let windows = state
+        .windows
         .lock()
         .map_err(|_| "desktop window state lock poisoned".to_string())?;
-    Ok(status.pinned)
-}
-
-fn main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
-
-    if window.label() != "main" {
-        return Err("only the main window can enter desktop owner mode".to_string());
-    }
-
-    Ok(window)
+    Ok(windows.pinned(label))
 }
 
 async fn run_on_main_thread<T, F>(window: &WebviewWindow, operation: F) -> Result<T, String>
@@ -290,12 +290,8 @@ mod platform {
     pub(super) fn attach_desktop_owner(
         window: &WebviewWindow,
     ) -> Result<DesktopOwnerAttachment, String> {
-        if window.label() != "main" {
-            return Err("only the main window can enter desktop owner mode".to_string());
-        }
-
-        let main = window.hwnd().map_err(|error| error.to_string())?.0 as HWND;
-        ensure_window(main, "main window")?;
+        let target = window.hwnd().map_err(|error| error.to_string())?.0 as HWND;
+        ensure_window(target, "widget window")?;
 
         let host = find_desktop_host()?;
         let host_class = class_name(host.host)?;
@@ -305,15 +301,15 @@ mod platform {
             host_class
         );
         eprintln!("[desktop] defview: {}", format_hwnd(host.def_view));
-        eprintln!("[desktop] main top-level HWND: {}", format_hwnd(main));
+        eprintln!("[desktop] widget top-level HWND: {}", format_hwnd(target));
 
         let original_owner =
-            get_window_long(main, GWLP_HWNDPARENT, "read original main window owner")?;
-        let dpi_before = unsafe { GetDpiForWindow(main) };
-        eprintln!("[desktop] main DPI before owner attach: {dpi_before}");
+            get_window_long(target, GWLP_HWNDPARENT, "read original widget window owner")?;
+        let dpi_before = unsafe { GetDpiForWindow(target) };
+        eprintln!("[desktop] widget DPI before owner attach: {dpi_before}");
 
         let attachment = DesktopOwnerAttachment {
-            main_hwnd: main as isize,
+            window_hwnd: target as isize,
             host_hwnd: host.host as isize,
             def_view_hwnd: host.def_view as isize,
             original_owner,
@@ -321,23 +317,23 @@ mod platform {
         };
 
         if let Err(error) = set_window_long(
-            main,
+            target,
             GWLP_HWNDPARENT,
             host.host as isize,
-            "set desktop host as main window owner",
+            "set desktop host as widget window owner",
         ) {
             return Err(error);
         }
 
-        if let Err(error) = validate_owner_attachment(main, host.host, host.def_view) {
+        if let Err(error) = validate_owner_attachment(target, host.host, host.def_view) {
             return rollback_owner(&attachment, error);
         }
 
-        let dpi_after = unsafe { GetDpiForWindow(main) };
-        eprintln!("[desktop] main DPI after owner attach: {dpi_after}");
+        let dpi_after = unsafe { GetDpiForWindow(target) };
+        eprintln!("[desktop] widget DPI after owner attach: {dpi_after}");
         if dpi_before != dpi_after {
             eprintln!(
-                "[desktop] warning: main DPI changed during owner attach: {dpi_before} -> {dpi_after}"
+                "[desktop] warning: widget DPI changed during owner attach: {dpi_before} -> {dpi_after}"
             );
         }
 
@@ -346,10 +342,10 @@ mod platform {
     }
 
     pub(super) fn detach_desktop_owner(attachment: &DesktopOwnerAttachment) -> Result<(), String> {
-        let main = as_hwnd(attachment.main_hwnd);
+        let main = as_hwnd(attachment.window_hwnd);
         let host = as_hwnd(attachment.host_hwnd);
         let def_view = as_hwnd(attachment.def_view_hwnd);
-        ensure_window(main, "main window during owner restore")?;
+        ensure_window(main, "widget window during owner restore")?;
 
         if let Err(error) = validate_desktop_host(host, def_view) {
             eprintln!("[desktop] owner host changed before detach: {error}");
@@ -358,7 +354,7 @@ mod platform {
         if attachment.original_owner != 0 {
             ensure_window(
                 as_hwnd(attachment.original_owner),
-                "original main window owner",
+                "original widget window owner",
             )?;
         }
 
@@ -366,14 +362,14 @@ mod platform {
             main,
             GWLP_HWNDPARENT,
             attachment.original_owner,
-            "restore original main window owner",
+            "restore original widget window owner",
         )?;
 
         let restored_owner =
-            get_window_long(main, GWLP_HWNDPARENT, "verify restored main window owner")?;
+            get_window_long(main, GWLP_HWNDPARENT, "verify restored widget window owner")?;
         if restored_owner != attachment.original_owner {
             return Err(format!(
-                "restored owner mismatch for main HWND {}: expected {}, found {}",
+                "restored owner mismatch for widget HWND {}: expected {}, found {}",
                 format_hwnd(main),
                 format_handle_value(attachment.original_owner),
                 format_handle_value(restored_owner)
@@ -382,7 +378,7 @@ mod platform {
 
         let dpi_after_detach = unsafe { GetDpiForWindow(main) };
         eprintln!(
-            "[desktop] main DPI after owner detach: {dpi_after_detach} (before attach: {})",
+            "[desktop] widget DPI after owner detach: {dpi_after_detach} (before attach: {})",
             attachment.dpi_before
         );
         eprintln!("[desktop] owner detached successfully");
@@ -393,19 +389,15 @@ mod platform {
         attachment: &DesktopOwnerAttachment,
     ) -> Result<(), String> {
         validate_owner_attachment(
-            as_hwnd(attachment.main_hwnd),
+            as_hwnd(attachment.window_hwnd),
             as_hwnd(attachment.host_hwnd),
             as_hwnd(attachment.def_view_hwnd),
         )
     }
 
     pub(super) fn restore_normal_z_order(window: &WebviewWindow) -> Result<String, String> {
-        if window.label() != "main" {
-            return Err("only the main window can restore normal Z-order".to_string());
-        }
-
         let main = window.hwnd().map_err(|error| error.to_string())?.0 as HWND;
-        ensure_window(main, "main window during normal Z-order restore")?;
+        ensure_window(main, "widget window during normal Z-order restore")?;
         let owner = get_window_long(main, GWLP_HWNDPARENT, "read owner after normal restore")?;
         eprintln!(
             "[desktop] actual owner after normal = {}",
@@ -434,16 +426,16 @@ mod platform {
     pub(super) fn log_dpi_after_always_on_bottom(
         attachment: &DesktopOwnerAttachment,
     ) -> Result<(), String> {
-        let main = as_hwnd(attachment.main_hwnd);
-        ensure_window(main, "main window after always-on-bottom")?;
+        let main = as_hwnd(attachment.window_hwnd);
+        ensure_window(main, "widget window after always-on-bottom")?;
         let dpi = unsafe { GetDpiForWindow(main) };
         eprintln!(
-            "[desktop] main DPI after always-on-bottom: {dpi} (before owner attach: {})",
+            "[desktop] widget DPI after always-on-bottom: {dpi} (before owner attach: {})",
             attachment.dpi_before
         );
         if dpi != attachment.dpi_before {
             eprintln!(
-                "[desktop] warning: main DPI changed after always-on-bottom: {} -> {dpi}",
+                "[desktop] warning: widget DPI changed after always-on-bottom: {} -> {dpi}",
                 attachment.dpi_before
             );
         }
@@ -454,12 +446,12 @@ mod platform {
         attachment: &DesktopOwnerAttachment,
         attach_error: String,
     ) -> Result<DesktopOwnerAttachment, String> {
-        let main = as_hwnd(attachment.main_hwnd);
+        let main = as_hwnd(attachment.window_hwnd);
         match set_window_long(
             main,
             GWLP_HWNDPARENT,
             attachment.original_owner,
-            "rollback original main window owner",
+            "rollback original widget window owner",
         ) {
             Ok(_) => {
                 eprintln!("[desktop] owner rollback succeeded");
@@ -555,13 +547,13 @@ mod platform {
     }
 
     fn validate_owner_attachment(main: HWND, host: HWND, def_view: HWND) -> Result<(), String> {
-        ensure_window(main, "main window after owner attach")?;
+        ensure_window(main, "widget window after owner attach")?;
         validate_desktop_host(host, def_view)?;
 
-        let owner = get_window_long(main, GWLP_HWNDPARENT, "verify main window owner")?;
+        let owner = get_window_long(main, GWLP_HWNDPARENT, "verify widget window owner")?;
         if owner != host as isize {
             return Err(format!(
-                "main window owner mismatch: expected {}, found {}",
+                "widget window owner mismatch: expected {}, found {}",
                 format_hwnd(host),
                 format_handle_value(owner)
             ));

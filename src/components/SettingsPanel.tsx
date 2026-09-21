@@ -1,6 +1,6 @@
-import { LogIn, LogOut, RotateCcw, UserCircle, X } from "lucide-react";
+import { ExternalLink, LogIn, LogOut, Plus, RotateCcw, UserCircle, X } from "lucide-react";
 import { localizeBackendMessage, useI18n } from "../lib/i18n";
-import type { AuthStatus, Settings } from "../lib/types";
+import type { AuthStatus, Settings, WidgetInstance } from "../lib/types";
 
 type Props = {
   open: boolean;
@@ -12,6 +12,11 @@ type Props = {
   onLogout: () => void;
   onChange: (settings: Partial<Settings>) => void;
   onEnsureLists: () => void;
+  widgetInstances: WidgetInstance[];
+  currentWidgetId: string | null;
+  onCreateWidget: () => void;
+  onOpenWidget: (instanceId: string) => void;
+  onCloseWidget?: () => void;
 };
 
 export function SettingsPanel({
@@ -24,6 +29,11 @@ export function SettingsPanel({
   onLogout,
   onChange,
   onEnsureLists,
+  widgetInstances,
+  currentWidgetId,
+  onCreateWidget,
+  onOpenWidget,
+  onCloseWidget,
 }: Props) {
   const { t } = useI18n();
 
@@ -58,15 +68,6 @@ export function SettingsPanel({
           {auth.loggedIn ? t("settings.logout") : t("settings.login")}
         </button>
       </section>
-
-      <label className="settings-row">
-        <span>{t("settings.alwaysOnTop")}</span>
-        <input
-          type="checkbox"
-          checked={settings.alwaysOnTop}
-          onChange={(event) => onChange({ alwaysOnTop: event.target.checked })}
-        />
-      </label>
 
       <label className="settings-row settings-row--stacked">
         <span>{t("settings.opacity", { value: Math.round(settings.opacity * 100) })}</span>
@@ -154,6 +155,38 @@ export function SettingsPanel({
           onChange={(event) => onChange({ debugMode: event.target.checked })}
         />
       </label>
+
+      <section className="settings-group widget-manager">
+        <div className="widget-manager__heading">
+          <strong>{t("widget.desktopWidgets")}</strong>
+          <button className="text-button" onClick={onCreateWidget}>
+            <Plus size={15} />
+            {t("widget.newWindow")}
+          </button>
+        </div>
+        <div className="widget-manager__list">
+          {widgetInstances.map((instance) => (
+            <div className="widget-manager__item" key={instance.id}>
+              <span>{instance.name}{instance.isPrimary ? ` · ${t("widget.primary")}` : ""}</span>
+              {!instance.isPrimary && (
+                <button
+                  className="text-button"
+                  disabled={instance.id === currentWidgetId}
+                  onClick={() => onOpenWidget(instance.id)}
+                >
+                  <ExternalLink size={14} />
+                  {instance.id === currentWidgetId ? t("widget.current") : instance.isOpen ? t("widget.show") : t("widget.open")}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        {onCloseWidget && (
+          <button className="secondary-button" onClick={onCloseWidget}>
+            {t("widget.closeWindow")}
+          </button>
+        )}
+      </section>
 
       <button className="secondary-button" onClick={onEnsureLists}>
         <RotateCcw size={16} />

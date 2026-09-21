@@ -2,12 +2,12 @@ use std::{
     future::Future,
     sync::{
         atomic::{AtomicBool, AtomicU8, Ordering},
-        Arc,
+        Arc, OnceLock,
     },
     time::Duration,
 };
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{Mutex, Notify};
 
 use crate::{auth, db, models::SyncStatusDto, sync, AppState};
@@ -62,6 +62,7 @@ pub struct SyncCoordinator {
     worker_started: AtomicBool,
     sync_active: AtomicBool,
     last_skip_reason: AtomicU8,
+    app_handle: OnceLock<AppHandle>,
 }
 
 impl Default for SyncCoordinator {
@@ -80,6 +81,7 @@ impl SyncCoordinator {
             worker_started: AtomicBool::new(false),
             sync_active: AtomicBool::new(false),
             last_skip_reason: AtomicU8::new(BackgroundSkipReason::None as u8),
+            app_handle: OnceLock::new(),
         }
     }
 
@@ -89,6 +91,7 @@ impl SyncCoordinator {
             return;
         }
 
+        let _ = self.app_handle.set(app.clone());
         let coordinator = Arc::clone(self);
         tauri::async_runtime::spawn(async move {
             coordinator.worker_loop(app).await;
@@ -117,6 +120,7 @@ impl SyncCoordinator {
             set_syncing_status(state, "Syncing current list");
             let next = sync::sync_list_now(state, list_id).await;
             store_sync_status(state, &next);
+            self.emit_local_tasks_changed_if_success(&next);
             eprintln!(
                 "[sync-coordinator] sync completed: reason=manual-list state={}",
                 next.state
@@ -188,11 +192,23 @@ impl SyncCoordinator {
         set_syncing_status(state, "Syncing");
         let next = sync::execute_global_sync(state).await;
         store_sync_status(state, &next);
+        self.emit_local_tasks_changed_if_success(&next);
         eprintln!(
             "[sync-coordinator] sync completed: reason={reason} state={}",
             next.state
         );
         next
+    }
+
+    fn emit_local_tasks_changed_if_success(&self, status: &SyncStatusDto) {
+        if status.state != "idle" {
+            return;
+        }
+        if let Some(app) = self.app_handle.get() {
+            if let Err(error) = app.emit("local-tasks-changed", ()) {
+                eprintln!("[sync-coordinator] failed to emit local-tasks-changed: {error}");
+            }
+        }
     }
 
     async fn run_serialized<T>(&self, operation: impl Future<Output = T>) -> T {

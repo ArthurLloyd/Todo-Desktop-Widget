@@ -9,11 +9,16 @@ type Props = {
   completingIds: Set<string>;
   onComplete: (taskId: string) => void;
   onOpenDetails: (task: Task) => void;
+  unavailable?: boolean;
 };
 
-export function TaskList({ tasks, listName, listRole, completingIds, onComplete, onOpenDetails }: Props) {
+export function TaskList({ tasks, listName, listRole, completingIds, onComplete, onOpenDetails, unavailable }: Props) {
   const { t } = useI18n();
   const displayName = displayListName(listName, listRole, t);
+
+  if (unavailable) {
+    return <div className="empty-state"><span>{t("widget.listUnavailable")}</span></div>;
+  }
 
   if (tasks.length === 0) {
     return (

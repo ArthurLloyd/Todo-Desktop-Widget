@@ -8,6 +8,7 @@ type Props = {
   isPinned: boolean;
   taskLists: TaskList[];
   selectedListId?: string | null;
+  listUnavailable?: boolean;
   sortMode: SortMode;
   syncStatus: SyncStatus;
   onDragStart: () => void;
@@ -22,6 +23,7 @@ export function TitleBar({
   isPinned,
   taskLists,
   selectedListId,
+  listUnavailable,
   sortMode,
   syncStatus,
   onDragStart,
@@ -46,10 +48,11 @@ export function TitleBar({
         {taskLists.length > 0 ? (
           <select
             className="list-select"
-            value={selectedListId || taskLists[0]?.id || ""}
+            value={selectedListId || ""}
             title={t("title.taskList")}
             onChange={(event) => onSelectList(event.target.value)}
           >
+            {listUnavailable && <option value="">{t("widget.listUnavailableShort")}</option>}
             {taskLists.map((list) => (
               <option key={list.id} value={list.id}>
                 {displayListName(list, t)}

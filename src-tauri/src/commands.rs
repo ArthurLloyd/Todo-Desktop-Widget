@@ -1,17 +1,17 @@
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::{
     auth, db, debug_console,
     models::{
         AuthStatusDto, LoginStartDto, SettingsDto, SettingsPatch, SyncStatusDto, TaskDto,
-        TaskListDto, TaskPatchDto, WidgetInstanceDto, WidgetInstanceInput, WidgetPaneDto,
-        WidgetPaneInput, WidgetThemeDto, WidgetThemeInput,
+        TaskListDto, TaskPatchDto, WidgetContextDto, WidgetInstanceDto, WidgetInstanceInput,
+        WidgetPaneDto, WidgetPaneInput, WidgetThemeDto, WidgetThemeInput,
     },
     settings,
     sync_coordinator::GlobalSyncReason,
-    widget_config, widget_snapshot, AppState,
+    widget_config, widget_snapshot, widget_window, AppState,
 };
 
 #[tauri::command]
@@ -84,6 +84,7 @@ pub fn close_task_details_window(app: AppHandle, label: String) -> Result<(), St
 
 #[tauri::command]
 pub fn add_task(
+    app: AppHandle,
     state: State<'_, AppState>,
     title: String,
     list_role: String,
@@ -103,11 +104,13 @@ pub fn add_task(
     state
         .sync_coordinator
         .request_global_sync(GlobalSyncReason::Mutation);
+    emit_local_tasks_changed(&app);
     Ok(task)
 }
 
 #[tauri::command]
 pub fn add_task_to_list(
+    app: AppHandle,
     state: State<'_, AppState>,
     title: String,
     list_id: String,
@@ -122,11 +125,16 @@ pub fn add_task_to_list(
     state
         .sync_coordinator
         .request_global_sync(GlobalSyncReason::Mutation);
+    emit_local_tasks_changed(&app);
     Ok(task)
 }
 
 #[tauri::command]
-pub fn complete_task(state: State<'_, AppState>, task_id: String) -> Result<(), String> {
+pub fn complete_task(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<(), String> {
     let conn = state
         .db
         .lock()
@@ -137,11 +145,13 @@ pub fn complete_task(state: State<'_, AppState>, task_id: String) -> Result<(), 
     state
         .sync_coordinator
         .request_global_sync(GlobalSyncReason::Mutation);
+    emit_local_tasks_changed(&app);
     Ok(())
 }
 
 #[tauri::command]
 pub fn update_task(
+    app: AppHandle,
     state: State<'_, AppState>,
     task_id: String,
     patch: TaskPatchDto,
@@ -156,11 +166,16 @@ pub fn update_task(
     state
         .sync_coordinator
         .request_global_sync(GlobalSyncReason::Mutation);
+    emit_local_tasks_changed(&app);
     Ok(task)
 }
 
 #[tauri::command]
-pub fn delete_task(state: State<'_, AppState>, task_id: String) -> Result<(), String> {
+pub fn delete_task(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<(), String> {
     let conn = state
         .db
         .lock()
@@ -174,6 +189,8 @@ pub fn delete_task(state: State<'_, AppState>, task_id: String) -> Result<(), St
             .sync_coordinator
             .request_global_sync(GlobalSyncReason::Mutation);
     }
+
+    emit_local_tasks_changed(&app);
 
     Ok(())
 }
@@ -513,6 +530,78 @@ pub fn resolve_widget_pane_theme(
 }
 
 #[tauri::command]
+pub fn get_current_widget_context(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<WidgetContextDto, String> {
+    widget_window::resolve_widget_context(&window, &state)
+}
+
+#[tauri::command]
+pub async fn create_widget_window(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    initial_list_id: Option<String>,
+) -> Result<WidgetInstanceDto, String> {
+    let source_position = window.outer_position().ok();
+    let source_size = window.inner_size().ok();
+    let instance = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        let instance =
+            widget_config::create_widget_with_default_pane(&conn, initial_list_id.as_deref())
+                .map_err(to_string)?;
+        if let (Some(position), Some(size)) = (source_position, source_size) {
+            widget_config::save_widget_geometry(
+                &conn,
+                &instance.id,
+                position.x.saturating_add(32),
+                position.y.saturating_add(32),
+                size.width,
+                size.height,
+            )
+            .map_err(to_string)?;
+        }
+        widget_config::get_widget_instance(&conn, &instance.id).map_err(to_string)?
+    };
+    widget_window::open_widget_window(&app, &instance.id).await?;
+    let _ = app.emit("widget-config-changed", ());
+    Ok(instance)
+}
+
+#[tauri::command]
+pub async fn open_widget_window(app: AppHandle, instance_id: String) -> Result<(), String> {
+    widget_window::open_widget_window(&app, &instance_id).await?;
+    let _ = app.emit("widget-config-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn close_current_widget_window(window: WebviewWindow) -> Result<(), String> {
+    let app = window.app_handle().clone();
+    widget_window::close_secondary_widget(&window).await?;
+    let _ = app.emit("widget-config-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_current_widget_list(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    list_id: String,
+) -> Result<WidgetPaneDto, String> {
+    let context = widget_window::resolve_widget_context(&window, &state)?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::update_first_pane_list(&conn, &context.instance.id, &list_id).map_err(to_string)
+}
+
+#[tauri::command]
 pub async fn open_task_details(app: AppHandle, task_id: String) -> Result<(), String> {
     let hash = format!("{:x}", Sha256::digest(task_id.as_bytes()));
     let label = format!("task-details-{}", &hash[..16]);
@@ -547,15 +636,27 @@ pub async fn open_task_details(app: AppHandle, task_id: String) -> Result<(), St
 }
 
 #[tauri::command]
-pub async fn set_window_mode(app: AppHandle, mode: String) -> Result<(), String> {
-    crate::desktop_window::set_main_window_mode(&app, &mode).await
+pub async fn set_window_mode(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    mode: String,
+) -> Result<(), String> {
+    crate::desktop_window::set_widget_window_mode(&window, &mode).await?;
+    if mode == "pinned" || mode == "normal" {
+        let context = widget_window::resolve_widget_context(&window, &state)?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::set_widget_pinned(&conn, &context.instance.id, mode == "pinned")
+            .map_err(to_string)?;
+        let _ = window.app_handle().emit("widget-config-changed", ());
+    }
+    Ok(())
 }
 
 #[tauri::command]
-pub fn start_drag(app: AppHandle) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
+pub fn start_drag(window: WebviewWindow) -> Result<(), String> {
     window.start_dragging().map_err(to_string)
 }
 
@@ -566,4 +667,10 @@ pub fn start_window_drag(window: WebviewWindow) -> Result<(), String> {
 
 fn to_string(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+fn emit_local_tasks_changed(app: &AppHandle) {
+    if let Err(error) = app.emit("local-tasks-changed", ()) {
+        eprintln!("[tasks] failed to emit local-tasks-changed: {error}");
+    }
 }

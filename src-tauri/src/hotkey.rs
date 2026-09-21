@@ -8,10 +8,10 @@ pub fn init(app: &AppHandle) -> anyhow::Result<()> {
         .on_shortcut(shortcut, |app, _shortcut, event| {
             if event.state() == ShortcutState::Pressed {
                 if let Some(window) = app.get_webview_window("main") {
-                    let _ = crate::desktop_window::show_main_window(app);
+                    let _ = crate::desktop_window::show_widget_window(&window);
                     let _ = window.set_focus();
                     let _ = window.eval(quick_add_event_js());
-                    let _ = crate::desktop_window::enforce_main_window_z_order(app);
+                    let _ = crate::desktop_window::enforce_widget_window_z_order(&window);
                 }
             }
         });

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { emit, listen } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { api } from "./lib/api";
-import type { AuthStatus, ListRole, Settings, SortMode, SyncStatus, Task, TaskList as TodoList, TaskPatch } from "./lib/types";
+import type { AuthStatus, ListRole, Settings, SortMode, SyncStatus, Task, TaskList as TodoList, TaskPatch, WidgetContext, WidgetInstance } from "./lib/types";
 import { WidgetShell } from "./components/WidgetShell";
 import { TitleBar } from "./components/TitleBar";
 import { TaskInput } from "./components/TaskInput";
@@ -62,6 +62,9 @@ function WidgetApp() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(defaultStatus);
   const [auth, setAuth] = useState<AuthStatus>({ loggedIn: false });
   const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [widgetContext, setWidgetContext] = useState<WidgetContext | null>(null);
+  const [widgetInstances, setWidgetInstances] = useState<WidgetInstance[]>([]);
+  const [listUnavailable, setListUnavailable] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [loginNotice, setLoginNotice] = useState<string | null>(null);
@@ -83,24 +86,33 @@ function WidgetApp() {
   );
 
   const refreshLocal = useCallback(async (preferredListId?: string | null) => {
-    const [nextLists, nextStatus, nextInboxCount, nextAuth, nextSettings] = await Promise.all([
+    const [nextLists, nextStatus, nextInboxCount, nextAuth, nextSettings, nextContext, nextInstances] = await Promise.all([
       api.getTaskLists(),
       api.getSyncStatus(),
       api.getInboxCount(),
       api.getAuthStatus(),
       api.getSettings(),
+      api.getCurrentWidgetContext(),
+      api.listWidgetInstances(),
     ]);
 
+    const configuredListId = nextContext.panes[0]?.listId || null;
     const currentListId = preferredListId !== undefined ? preferredListId : selectedListIdRef.current;
-    const nextSelectedListId =
-      (currentListId && nextLists.some((list) => list.id === currentListId) && currentListId) ||
-      nextLists.find((list) => list.role === "today")?.id ||
-      nextLists[0]?.id ||
-      null;
+    let nextSelectedListId: string | null = null;
+    let nextListUnavailable = false;
+    if (currentListId && nextLists.some((list) => list.id === currentListId)) {
+      nextSelectedListId = currentListId;
+    } else if (configuredListId && nextLists.some((list) => list.id === configuredListId)) {
+      nextSelectedListId = configuredListId;
+    } else if (configuredListId) {
+      nextListUnavailable = true;
+    } else {
+      nextSelectedListId = nextLists.find((list) => list.role === "today")?.id || nextLists[0]?.id || null;
+    }
 
     const nextTasks = nextSelectedListId
       ? await api.getTasksForList(nextSelectedListId)
-      : await api.getTodayTasks();
+      : [];
 
     setTaskLists(nextLists);
     selectedListIdRef.current = nextSelectedListId;
@@ -110,6 +122,9 @@ function WidgetApp() {
     setInboxCount(nextInboxCount);
     setAuth(nextAuth);
     setSettings(nextSettings);
+    setWidgetContext(nextContext);
+    setWidgetInstances(nextInstances);
+    setListUnavailable(nextListUnavailable);
   }, []);
 
   useEffect(() => {
@@ -118,10 +133,17 @@ function WidgetApp() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    void listen("task-updated", () => void refreshLocal()).then((nextUnlisten) => {
+    let unlistenConfig: (() => void) | undefined;
+    void listen("local-tasks-changed", () => void refreshLocal()).then((nextUnlisten) => {
       unlisten = nextUnlisten;
     });
-    return () => unlisten?.();
+    void listen("widget-config-changed", () => void refreshLocal()).then((nextUnlisten) => {
+      unlistenConfig = nextUnlisten;
+    });
+    return () => {
+      unlisten?.();
+      unlistenConfig?.();
+    };
   }, [refreshLocal]);
 
   useEffect(() => {
@@ -245,9 +267,41 @@ function WidgetApp() {
   async function handleSettingsChange(next: Partial<Settings>) {
     const updated = await api.updateSettings(next);
     setSettings(updated);
-    if (next.alwaysOnTop !== undefined) {
-      await api.setWindowMode(next.alwaysOnTop ? "pinned" : "normal");
-    }
+  }
+
+  async function handleTogglePinned() {
+    if (!widgetContext) return;
+    const pinned = !widgetContext.instance.pinned;
+    await api.setWindowMode(pinned ? "pinned" : "normal");
+    setWidgetContext((current) => current ? {
+      ...current,
+      instance: { ...current.instance, pinned },
+    } : current);
+    setWidgetInstances((current) => current.map((instance) =>
+      instance.id === widgetContext.instance.id ? { ...instance, pinned } : instance,
+    ));
+  }
+
+  async function handleSelectList(listId: string) {
+    await api.updateCurrentWidgetList(listId);
+    selectedListIdRef.current = listId;
+    setSelectedListId(listId);
+    setListUnavailable(false);
+    setTasks(await api.getTasksForList(listId));
+    setWidgetContext((current) => current ? {
+      ...current,
+      panes: current.panes.map((pane, index) => index === 0 ? { ...pane, listId } : pane),
+    } : current);
+  }
+
+  async function handleCreateWidget() {
+    await api.createWidgetWindow(selectedListIdRef.current);
+    setWidgetInstances(await api.listWidgetInstances());
+  }
+
+  async function handleOpenWidget(instanceId: string) {
+    await api.openWidgetWindow(instanceId);
+    setWidgetInstances(await api.listWidgetInstances());
   }
 
   async function hideWindow() {
@@ -258,23 +312,20 @@ function WidgetApp() {
     <I18nProvider language={settings.language}>
       <WidgetShell opacity={settings.opacity} fontFamily={settings.fontFamily} fontScale={settings.fontScale}>
       <TitleBar
-        isPinned={settings.alwaysOnTop}
+        isPinned={widgetContext?.instance.pinned || false}
         taskLists={taskLists}
         selectedListId={selectedListId}
         sortMode={sortMode}
         syncStatus={syncStatus}
         onDragStart={() => void api.startDrag()}
-        onSelectList={(listId) => {
-          selectedListIdRef.current = listId;
-          setSelectedListId(listId);
-          void api.getTasksForList(listId).then(setTasks);
-        }}
+        listUnavailable={listUnavailable}
+        onSelectList={(listId) => void handleSelectList(listId)}
         onSelectSort={(nextSortMode) => {
           setSortMode(nextSortMode);
           window.localStorage.setItem("todo-sort-mode", nextSortMode);
         }}
         onRefresh={handleSync}
-        onTogglePinned={() => void handleSettingsChange({ alwaysOnTop: !settings.alwaysOnTop })}
+        onTogglePinned={() => void handleTogglePinned()}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
@@ -286,6 +337,7 @@ function WidgetApp() {
         completingIds={completingIds}
         onComplete={handleComplete}
         onOpenDetails={(task) => void api.openTaskDetails(task.id)}
+        unavailable={listUnavailable}
       />
       <FooterStatus inboxCount={inboxCount} syncStatus={syncStatus} />
 
@@ -299,16 +351,21 @@ function WidgetApp() {
         onLogout={() => void api.logout().then(() => refreshLocal())}
         onChange={(next) => void handleSettingsChange(next)}
         onEnsureLists={() => void handleSync()}
+        widgetInstances={widgetInstances}
+        currentWidgetId={widgetContext?.instance.id || null}
+        onCreateWidget={() => void handleCreateWidget()}
+        onOpenWidget={(instanceId) => void handleOpenWidget(instanceId)}
+        onCloseWidget={widgetContext?.instance.isPrimary ? undefined : () => void api.closeCurrentWidgetWindow()}
       />
 
       <WidgetContextMenu
         open={contextMenu.open}
         x={contextMenu.x}
         y={contextMenu.y}
-        isPinned={settings.alwaysOnTop}
+        isPinned={widgetContext?.instance.pinned || false}
         onClose={() => setContextMenu((current) => ({ ...current, open: false }))}
         onRefresh={() => void handleSync()}
-        onTogglePinned={() => void handleSettingsChange({ alwaysOnTop: !settings.alwaysOnTop })}
+        onTogglePinned={() => void handleTogglePinned()}
         onOpenSettings={() => setSettingsOpen(true)}
         onHide={() => void hideWindow()}
       />
@@ -477,11 +534,6 @@ function TaskDetailsWindow({ taskId, windowLabel }: { taskId: string | null; win
       const updated = await api.updateTask(nextTaskId, patch);
       setTask(updated);
       await load();
-      try {
-        await emit("task-updated", { taskId: nextTaskId });
-      } catch (notificationError) {
-        console.warn("Task saved, but the main window refresh notification failed", notificationError);
-      }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError));
     } finally {
@@ -494,11 +546,6 @@ function TaskDetailsWindow({ taskId, windowLabel }: { taskId: string | null; win
     setError(null);
     try {
       await api.deleteTask(nextTaskId);
-      try {
-        await emit("task-updated", { taskId: nextTaskId, deleted: true });
-      } catch (notificationError) {
-        console.warn("Task deleted, but the main window refresh notification failed", notificationError);
-      }
       closeWindow();
     } catch (deleteError) {
       console.error("Failed to delete task locally", deleteError);

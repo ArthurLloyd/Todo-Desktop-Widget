@@ -10,6 +10,7 @@ import type {
   TaskPatch,
   WidgetInstance,
   WidgetInstanceInput,
+  WidgetContext,
   WidgetPane,
   WidgetPaneInput,
   WidgetTheme,
@@ -221,6 +222,14 @@ export const api = {
   deleteWidgetTheme: (id: string) => call<void>("delete_widget_theme", { id }),
   resolveWidgetPaneTheme: (paneId: string) =>
     call<WidgetTheme>("resolve_widget_pane_theme", { paneId }),
+  getCurrentWidgetContext: () => call<WidgetContext>("get_current_widget_context"),
+  createWidgetWindow: (initialListId?: string | null) =>
+    call<WidgetInstance>("create_widget_window", { initialListId: initialListId ?? null }),
+  openWidgetWindow: (instanceId: string) =>
+    call<void>("open_widget_window", { instanceId }),
+  closeCurrentWidgetWindow: () => call<void>("close_current_widget_window"),
+  updateCurrentWidgetList: (listId: string) =>
+    call<WidgetPane>("update_current_widget_list", { listId }),
   setWindowMode: async (mode: "normal" | "pinned" | "hidden") => {
     try {
       await invoke<void>("set_window_mode", { mode });
