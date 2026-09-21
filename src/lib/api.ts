@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AuthStatus,
+  AppInfo,
   ListRole,
   LoginStart,
   Settings,
@@ -202,6 +203,13 @@ export const api = {
   getInboxCount: () => call<number>("get_inbox_count", undefined, 0),
   getSettings: () =>
     call<Settings>("get_settings", undefined, mockSettings),
+  getAppInfo: () =>
+    call<AppInfo>("get_app_info", undefined, {
+      name: "Todo Desktop Widget",
+      version: "development",
+      platform: "web",
+      architecture: "unknown",
+    }),
   updateSettings: async (settings: Partial<Settings>) => {
     try {
       return await invoke<Settings>("update_settings", { settings });

@@ -27,4 +27,16 @@ mod tests {
             TrayActivationAction::ShowAndEnforcePinned
         );
     }
+
+    #[test]
+    fn second_launch_can_reuse_the_same_safe_activation_route() {
+        assert_eq!(
+            action_for_pinned(false),
+            TrayActivationAction::ActivateNormal
+        );
+        assert_eq!(
+            action_for_pinned(true),
+            TrayActivationAction::ShowAndEnforcePinned
+        );
+    }
 }

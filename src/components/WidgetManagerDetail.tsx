@@ -1,6 +1,7 @@
 import { ArrowLeft, Copy, ExternalLink, Palette, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useI18n } from "../lib/i18n";
+import { InlineError } from "./InlineError";
 import type {
   TaskList,
   WidgetContext,
@@ -219,7 +220,7 @@ export function WidgetManagerDetail({
         ))}
       </div>
 
-      {error ? <div className="settings-error">{error}</div> : null}
+      {error ? <InlineError message={error} /> : null}
 
       <footer className="widget-manager-detail__actions">
         <button className="text-button" type="button" disabled={busy} onClick={onShow}>

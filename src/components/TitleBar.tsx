@@ -57,13 +57,13 @@ export function TitleBar({
             <option value="title">{t("sort.title")}</option>
           </select>
         </label>
-        <button className="icon-button" title={t("title.refresh")} onClick={onRefresh}>
+        <button className="icon-button" title={t("title.refresh")} aria-label={t("title.refresh")} onClick={onRefresh}>
           <RefreshCw size={16} className={clsx(syncStatus.state === "syncing" && "spin")} />
         </button>
-        <button className="icon-button" title={isPinned ? t("title.unpin") : t("title.pin")} onClick={onTogglePinned}>
+        <button className="icon-button" title={isPinned ? t("title.unpin") : t("title.pin")} aria-label={isPinned ? t("title.unpin") : t("title.pin")} onClick={onTogglePinned}>
           {isPinned ? <PinOff size={16} /> : <Pin size={16} />}
         </button>
-        <button className="icon-button" title={t("title.settings")} onClick={onOpenSettings}>
+        <button className="icon-button" title={t("title.settings")} aria-label={t("title.settings")} onClick={onOpenSettings}>
           <Settings size={16} />
         </button>
       </div>

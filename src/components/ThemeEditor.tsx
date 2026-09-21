@@ -1,5 +1,6 @@
 import { Copy, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useI18n, type TranslationKey } from "../lib/i18n";
+import { InlineError } from "./InlineError";
 import {
   type ThemeColorKey,
   type ThemeDraftError,
@@ -181,7 +182,7 @@ export function ThemeEditor({
             </>
           ) : null}
         </div>
-        {saveError ? <div className="settings-error">{saveError}</div> : null}
+        {saveError ? <InlineError message={saveError} /> : null}
       </div>
 
       <ThemePreview

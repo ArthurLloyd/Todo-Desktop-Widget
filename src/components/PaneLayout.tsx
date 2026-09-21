@@ -41,6 +41,7 @@ export function PaneLayout({ layoutMode, panes, renderPane, onPersistWeights }: 
   const resizable = layoutMode === "columns" || layoutMode === "rows";
   const [weights, setWeights] = useState(() => weightsFromPanes(panes));
   const [persistError, setPersistError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const weightsRef = useRef(weights);
   const dragRef = useRef<DragState | null>(null);
   const dirtyRef = useRef(false);
@@ -148,6 +149,7 @@ export function PaneLayout({ layoutMode, panes, renderPane, onPersistWeights }: 
       beforeWeight: weightsRef.current[before.id] ?? before.sizeWeight,
       afterWeight: weightsRef.current[after.id] ?? after.sizeWeight,
     };
+    setDragging(true);
     setPersistError(null);
     event.preventDefault();
   }
@@ -166,6 +168,7 @@ export function PaneLayout({ layoutMode, panes, renderPane, onPersistWeights }: 
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     dragRef.current = null;
+    setDragging(false);
     void persistCurrentWeights();
   }
 
@@ -208,7 +211,7 @@ export function PaneLayout({ layoutMode, panes, renderPane, onPersistWeights }: 
   }
 
   return (
-    <section className={clsx("pane-layout", `pane-layout--${layoutMode}`)}>
+    <section className={clsx("pane-layout", `pane-layout--${layoutMode}`, dragging && "pane-layout--dragging")}>
       {visiblePanes.map((pane, index) => {
         const nextPane = visiblePanes[index + 1];
         const pairTotal = nextPane

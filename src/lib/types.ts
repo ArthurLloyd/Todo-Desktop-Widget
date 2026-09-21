@@ -73,6 +73,13 @@ export type Settings = {
   fontScale: number;
 };
 
+export type AppInfo = {
+  name: string;
+  version: string;
+  platform: string;
+  architecture: string;
+};
+
 export type WidgetLayoutMode = "single" | "columns" | "rows" | "grid";
 
 export type WidgetThemeConfig = {

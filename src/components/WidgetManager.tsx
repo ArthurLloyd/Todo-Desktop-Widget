@@ -16,6 +16,8 @@ import type {
 } from "../lib/types";
 import { WidgetManagerDetail } from "./WidgetManagerDetail";
 import { ManagementShell } from "./ManagementShell";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { InlineError } from "./InlineError";
 
 type Props = {
   managementThemeStyle: ManagementThemeCssVariables;
@@ -280,7 +282,7 @@ export function WidgetManager({
               />
             ))}
           </div>
-          {error && view === "list" ? <div className="settings-error">{error}</div> : null}
+          {error && view === "list" ? <InlineError message={error} /> : null}
         </aside>
 
         <main className="widget-manager-detail-column">
@@ -331,26 +333,15 @@ export function WidgetManager({
         </div>
 
       {deleteTarget ? (
-        <div
-          className="details-confirmation management-confirmation"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="delete-widget-title"
-        >
-          <section className="details-confirmation__card">
-            <h3 id="delete-widget-title">{t("widgetManager.deleteTitle", { name: deleteTarget.name })}</h3>
-            <p>{t("widgetManager.deleteBody")}</p>
-            <div className="details-confirmation__actions">
-              <button className="secondary-button" type="button" disabled={busy} onClick={() => setDeleteTarget(null)}>
-                {t("common.cancel")}
-              </button>
-              <button className="details-delete-button" type="button" disabled={busy} onClick={deleteWidget}>
-                <Trash2 size={14} />
-                {t("widgetManager.confirmDelete")}
-              </button>
-            </div>
-          </section>
-        </div>
+        <ConfirmDialog
+          danger
+          busy={busy}
+          title={t("widgetManager.deleteTitle", { name: deleteTarget.name })}
+          body={t("widgetManager.deleteBody")}
+          confirmLabel={t("widgetManager.confirmDelete")}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={deleteWidget}
+        />
       ) : null}
       </section>
     </ManagementShell>

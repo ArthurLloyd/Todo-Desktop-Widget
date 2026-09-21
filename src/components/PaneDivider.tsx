@@ -25,6 +25,7 @@ export function PaneDivider({
       data-orientation={orientation}
       role="separator"
       aria-label={label}
+      title={label}
       aria-orientation={orientation}
       aria-valuemin={0}
       aria-valuemax={100}

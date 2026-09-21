@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { taskDateKey } from "../lib/dates";
 import { useI18n } from "../lib/i18n";
 import type { Recurrence, RecurrenceMode, Task, TaskList, TaskPatch } from "../lib/types";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 type Props = {
   task: Task | null;
@@ -110,7 +111,7 @@ export function TaskDetailsPanel({
           <h2>{t("details.title")}</h2>
           <span>{taskList?.displayName || t("app.currentList")}</span>
         </div>
-        <button className="icon-button" title={t("details.close")} onClick={onClose}>
+        <button className="icon-button" title={t("details.close")} aria-label={t("details.close")} onClick={onClose}>
           <X size={16} />
         </button>
       </div>
@@ -208,28 +209,16 @@ export function TaskDetailsPanel({
       </div>
 
       {confirmingDelete ? (
-        <div className="details-confirmation" role="dialog" aria-modal="true" aria-labelledby="delete-task-title">
-          <div className="details-confirmation__card">
-            <h3 id="delete-task-title">{t("details.deleteTaskConfirmTitle")}</h3>
-            <p>{t("details.deleteTaskConfirmBody")}</p>
-            <div className="details-confirmation__actions">
-              <button
-                className="secondary-button"
-                disabled={deleting}
-                onClick={() => setConfirmingDelete(false)}
-              >
-                {t("details.cancel")}
-              </button>
-              <button
-                className="danger-button"
-                disabled={deleting}
-                onClick={() => void confirmDelete()}
-              >
-                {deleting ? t("details.deleting") : t("details.delete")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          danger
+          busy={deleting}
+          title={t("details.deleteTaskConfirmTitle")}
+          body={t("details.deleteTaskConfirmBody")}
+          confirmLabel={deleting ? t("details.deleting") : t("details.delete")}
+          cancelLabel={t("details.cancel")}
+          onCancel={() => setConfirmingDelete(false)}
+          onConfirm={() => void confirmDelete()}
+        />
       ) : null}
     </aside>
   );

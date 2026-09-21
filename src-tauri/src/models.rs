@@ -121,6 +121,15 @@ pub struct SettingsPatch {
     pub font_scale: Option<f64>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppInfoDto {
+    pub name: String,
+    pub version: String,
+    pub platform: String,
+    pub architecture: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum WidgetLayoutMode {

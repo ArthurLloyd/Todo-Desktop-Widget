@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api } from "./lib/api";
 import type {
   AuthStatus,
+  AppInfo,
   ListRole,
   Settings,
   SortMode,
@@ -41,6 +42,8 @@ import {
 } from "./lib/themeRuntime";
 import { deriveManagementTheme } from "./lib/managementTheme";
 import { reduceWidgetView } from "./lib/widgetView";
+import { classifyStartupPresentation } from "./lib/widgetPresentation";
+import { FirstRunState, WidgetLoadError, WidgetLoadingState } from "./components/WidgetStartupState";
 
 const defaultStatus: SyncStatus = { state: "idle" };
 const defaultSettings: Settings = {
@@ -87,6 +90,9 @@ function WidgetApp() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(defaultStatus);
   const [auth, setAuth] = useState<AuthStatus>({ loggedIn: false });
   const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
   const [widgetContext, setWidgetContext] = useState<WidgetContext | null>(null);
   const [widgetThemes, setWidgetThemes] = useState<WidgetTheme[]>([]);
   const widgetInstanceIdRef = useRef<string | null>(null);
@@ -117,6 +123,12 @@ function WidgetApp() {
     () => deriveManagementTheme(widgetTheme?.config),
     [widgetTheme],
   );
+  const startupPresentation = classifyStartupPresentation({
+    loading: initialLoading,
+    loadError: initialLoadError,
+    loggedIn: auth.loggedIn,
+    taskCount: tasks.length,
+  });
 
   const refreshTaskData = useCallback(async () => {
     const [snapshot, nextStatus, nextAuth, nextSettings] = await Promise.all([
@@ -149,9 +161,27 @@ function WidgetApp() {
     return nextInstances;
   }, []);
 
-  useEffect(() => {
-    void Promise.all([refreshTaskData(), reloadWidgetContext(), reloadWidgetInstances()]);
+  const loadInitialState = useCallback(async () => {
+    setInitialLoading(true);
+    setInitialLoadError(null);
+    try {
+      const [, , , nextAppInfo] = await Promise.all([
+        refreshTaskData(),
+        reloadWidgetContext(),
+        reloadWidgetInstances(),
+        api.getAppInfo(),
+      ]);
+      setAppInfo(nextAppInfo);
+    } catch (error) {
+      setInitialLoadError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setInitialLoading(false);
+    }
   }, [refreshTaskData, reloadWidgetContext, reloadWidgetInstances]);
+
+  useEffect(() => {
+    void loadInitialState();
+  }, [loadInitialState]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -335,16 +365,6 @@ function WidgetApp() {
     }
   }
 
-  async function handleDeletePane(paneId: string) {
-    setWidgetConfigError(null);
-    try {
-      await api.deleteCurrentWidgetPane(paneId);
-      await reloadWidgetContext();
-    } catch (error) {
-      setWidgetConfigError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
   async function handleLayoutChange(layoutMode: WidgetLayoutMode) {
     setWidgetConfigError(null);
     try {
@@ -421,7 +441,14 @@ function WidgetApp() {
           onOpenSettings={openSettings}
         />
 
-        {widgetContext && (
+        {startupPresentation === "loading" ? <WidgetLoadingState /> : null}
+        {startupPresentation === "load-error" && initialLoadError ? (
+          <WidgetLoadError message={initialLoadError} onRetry={() => void loadInitialState()} />
+        ) : null}
+        {startupPresentation === "first-run" ? (
+          <FirstRunState onLogin={() => void handleLogin()} onOpenSettings={openSettings} />
+        ) : null}
+        {startupPresentation === "ready" && widgetContext ? (
           <PaneLayout
             layoutMode={widgetContext.instance.layoutMode}
             panes={widgetContext.panes}
@@ -445,19 +472,19 @@ function WidgetApp() {
                   lists={taskLists}
                   tasks={paneTasks}
                   completingIds={completingIds}
-                  canDelete={widgetContext.panes.length > 1}
                   themeStyle={paneThemeStyle}
                   onSelectList={(paneId, listId) => void handleSelectPaneList(paneId, listId)}
                   onAdd={handlePaneAdd}
                   onComplete={handleComplete}
                   onOpenDetails={(task) => void api.openTaskDetails(task.id)}
-                  onDelete={(paneId) => void handleDeletePane(paneId)}
                 />
               );
             }}
           />
-        )}
-        <FooterStatus inboxCount={inboxCount} syncStatus={syncStatus} />
+        ) : null}
+        {startupPresentation === "ready" ? (
+          <FooterStatus inboxCount={inboxCount} syncStatus={syncStatus} onRetry={() => void handleSync()} />
+        ) : null}
 
         <WidgetContextMenu
           open={contextMenu.open}
@@ -479,11 +506,12 @@ function WidgetApp() {
         managementThemeStyle={managementThemeStyle}
         auth={auth}
         settings={settings}
+        appInfo={appInfo}
         loginNotice={loginNotice}
         onClose={() => dispatchView({ type: "close" })}
         onLogin={() => void handleLogin()}
         onLogout={() => void api.logout().then(() => refreshTaskData())}
-        onChange={(next) => void handleSettingsChange(next)}
+        onChange={handleSettingsChange}
         onEnsureLists={() => void handleSync()}
         currentWidget={widgetContext}
         widgetThemes={widgetThemes}

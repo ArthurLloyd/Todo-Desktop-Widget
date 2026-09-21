@@ -80,7 +80,7 @@ export function TaskItem({ task, completing, onComplete, onOpenDetails }: Props)
           {localPending ? <span className="task-pending">{t("task.pending")}</span> : null}
         </span>
       ) : null}
-      <button className="task-more" title={t("task.details")} onClick={() => onOpenDetails(task)}>
+      <button className="task-more" title={t("task.details")} aria-label={t("task.details")} onClick={() => onOpenDetails(task)}>
         <MoreHorizontal size={16} />
       </button>
     </li>

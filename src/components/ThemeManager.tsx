@@ -13,6 +13,7 @@ import {
 } from "../lib/themeEditor";
 import type { WidgetTheme, WidgetThemeInput } from "../lib/types";
 import { ThemeEditor } from "./ThemeEditor";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { ManagementShell } from "./ManagementShell";
 
 type Props = {
@@ -264,7 +265,7 @@ export function ThemeManager({
         </div>
 
       {pendingAction ? (
-        <Confirmation
+        <ConfirmDialog
           title={t("themeEditor.discardTitle")}
           body={t("themeEditor.discardBody")}
           confirmLabel={t("themeEditor.discard")}
@@ -273,7 +274,7 @@ export function ThemeManager({
         />
       ) : null}
       {deletePending && selectedTheme ? (
-        <Confirmation
+        <ConfirmDialog
           danger
           title={t("themeEditor.deleteTitle", { name: selectedTheme.name })}
           body={t("themeEditor.deleteBody")}
@@ -333,43 +334,6 @@ function displayThemeName(theme: WidgetTheme, t: ReturnType<typeof useI18n>["t"]
   if (theme.id === "violet") return t("theme.violet");
   if (theme.id === "forest") return t("theme.forest");
   return theme.name;
-}
-
-function Confirmation({
-  title,
-  body,
-  confirmLabel,
-  danger = false,
-  onCancel,
-  onConfirm,
-}: {
-  title: string;
-  body: string;
-  confirmLabel: string;
-  danger?: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const { t } = useI18n();
-  return (
-    <div
-      className="theme-confirmation management-confirmation"
-      role="alertdialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      <div className="theme-confirmation__card">
-        <strong>{title}</strong>
-        <p>{body}</p>
-        <div>
-          <button className="secondary-button" type="button" onClick={onCancel}>{t("common.cancel")}</button>
-          <button className={danger ? "danger-button" : "text-button"} type="button" onClick={onConfirm}>
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function initialDraft(theme?: WidgetTheme): ThemeEditorDraft {

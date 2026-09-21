@@ -1,20 +1,4 @@
-#[cfg(all(windows, not(debug_assertions)))]
-pub fn apply(enabled: bool) {
-    use windows_sys::Win32::System::Console::{AllocConsole, FreeConsole, GetConsoleWindow};
-
-    unsafe {
-        let has_console = !GetConsoleWindow().is_null();
-        match (enabled, has_console) {
-            (true, false) => {
-                AllocConsole();
-            }
-            (false, true) => {
-                FreeConsole();
-            }
-            _ => {}
-        }
-    }
-}
-
-#[cfg(any(not(windows), debug_assertions))]
+// Development builds already inherit the terminal. Release builds deliberately
+// keep the Windows GUI subsystem console-free; the legacy setting remains only
+// for backward-compatible settings deserialization.
 pub fn apply(_enabled: bool) {}

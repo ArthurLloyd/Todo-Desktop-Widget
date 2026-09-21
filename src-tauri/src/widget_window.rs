@@ -140,7 +140,7 @@ async fn create_widget_window(
     let window = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title(&instance.name)
         .inner_size(340.0, 560.0)
-        .min_inner_size(300.0, 360.0)
+        .min_inner_size(320.0, 360.0)
         .resizable(true)
         .decorations(false)
         .transparent(true)
@@ -154,7 +154,6 @@ async fn create_widget_window(
 
     restore_geometry(&window, instance)?;
     mark_open(app, &instance.id, true)?;
-    window.show().map_err(to_string)?;
     if instance.pinned {
         crate::desktop_window::set_widget_window_mode(&window, "pinned").await?;
     } else {
@@ -358,10 +357,20 @@ pub async fn restore_widget_windows(app: AppHandle) {
                 if let Err(error) = crate::desktop_window::set_widget_window_mode(&main, mode).await
                 {
                     eprintln!("[widget-window] failed to restore main mode: {error}");
+                    if let Err(show_error) = main.show() {
+                        eprintln!("[widget-window] failed to show main fallback: {show_error}");
+                    }
                 }
             }
         }
-        Err(error) => eprintln!("[widget-window] primary restore failed: {error}"),
+        Err(error) => {
+            eprintln!("[widget-window] primary restore failed: {error}");
+            if let Some(main) = app.get_webview_window(PRIMARY_WINDOW_LABEL) {
+                if let Err(show_error) = main.show() {
+                    eprintln!("[widget-window] failed to show main fallback: {show_error}");
+                }
+            }
+        }
     }
 
     match secondary {

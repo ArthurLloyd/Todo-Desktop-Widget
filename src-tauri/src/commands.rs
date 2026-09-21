@@ -3,12 +3,12 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, Webvi
 use tauri_plugin_opener::OpenerExt;
 
 use crate::{
-    auth, db, debug_console,
+    auth, autostart, db, debug_console,
     models::{
-        AuthStatusDto, LoginStartDto, SettingsDto, SettingsPatch, SyncStatusDto, TaskDto,
-        TaskListDto, TaskPatchDto, WidgetContextDto, WidgetInstanceDto, WidgetInstanceInput,
-        WidgetLayoutMode, WidgetPaneDto, WidgetPaneInput, WidgetPaneWeightInput,
-        WidgetTaskSnapshotDto, WidgetThemeDto, WidgetThemeInput,
+        AppInfoDto, AuthStatusDto, LoginStartDto, SettingsDto, SettingsPatch, SyncStatusDto,
+        TaskDto, TaskListDto, TaskPatchDto, WidgetContextDto, WidgetInstanceDto,
+        WidgetInstanceInput, WidgetLayoutMode, WidgetPaneDto, WidgetPaneInput,
+        WidgetPaneWeightInput, WidgetTaskSnapshotDto, WidgetThemeDto, WidgetThemeInput,
     },
     settings,
     sync_coordinator::GlobalSyncReason,
@@ -349,26 +349,42 @@ pub fn get_inbox_count(state: State<'_, AppState>) -> Result<i64, String> {
 }
 
 #[tauri::command]
-pub fn get_settings(state: State<'_, AppState>) -> Result<SettingsDto, String> {
+pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<SettingsDto, String> {
     let conn = state
         .db
         .lock()
         .map_err(|_| "database lock poisoned".to_string())?;
-    db::load_settings(&conn).map_err(to_string)
+    let mut current = db::load_settings(&conn).map_err(to_string)?;
+    match autostart::is_enabled(&app) {
+        Ok(actual_autostart) if current.autostart != actual_autostart => {
+            current.autostart = actual_autostart;
+            db::save_settings(&conn, &current).map_err(to_string)?;
+        }
+        Ok(_) => {}
+        Err(error) => {
+            eprintln!("[autostart] failed to read OS state; keeping persisted value: {error}");
+        }
+    }
+    Ok(current)
 }
 
 #[tauri::command]
 pub fn update_settings(
+    app: AppHandle,
     state: State<'_, AppState>,
     settings: SettingsPatch,
 ) -> Result<SettingsDto, String> {
     let interval_changed = settings.sync_interval_minutes.is_some();
+    let requested_autostart = settings.autostart;
     let conn = state
         .db
         .lock()
         .map_err(|_| "database lock poisoned".to_string())?;
     let current = db::load_settings(&conn).map_err(to_string)?;
-    let next = settings::apply_patch(current, settings);
+    let mut next = settings::apply_patch(current, settings);
+    if let Some(requested) = requested_autostart {
+        next.autostart = autostart::set_enabled(&app, requested)?;
+    }
     db::save_settings(&conn, &next).map_err(to_string)?;
     debug_console::apply(next.debug_mode);
     drop(conn);
@@ -378,6 +394,17 @@ pub fn update_settings(
             .notify_interval_changed(next.sync_interval_minutes);
     }
     Ok(next)
+}
+
+#[tauri::command]
+pub fn get_app_info(app: AppHandle) -> AppInfoDto {
+    let package = app.package_info();
+    AppInfoDto {
+        name: "Todo Desktop Widget".to_string(),
+        version: package.version.to_string(),
+        platform: std::env::consts::OS.to_string(),
+        architecture: std::env::consts::ARCH.to_string(),
+    }
 }
 
 #[tauri::command]

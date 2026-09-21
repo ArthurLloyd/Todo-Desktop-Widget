@@ -1,4 +1,5 @@
 mod auth;
+mod autostart;
 #[cfg(not(test))]
 mod commands;
 #[cfg(not(test))]
@@ -87,6 +88,18 @@ impl AppState {
 #[cfg(not(test))]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = widget_window::activate_primary_from_tray(&app).await {
+                    eprintln!("[single-instance] failed to activate primary widget: {error}");
+                }
+            });
+        }))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
@@ -148,6 +161,7 @@ pub fn run() {
             commands::get_inbox_count,
             commands::get_settings,
             commands::update_settings,
+            commands::get_app_info,
             commands::list_widget_instances,
             commands::get_widget_instance,
             commands::get_widget_context,

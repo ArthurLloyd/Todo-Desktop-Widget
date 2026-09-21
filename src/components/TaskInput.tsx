@@ -1,14 +1,15 @@
-import { KeyboardEvent, useState } from "react";
+import { KeyboardEvent, useState, type Ref } from "react";
 import { Plus } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 import type { ListRole } from "../lib/types";
 
 type Props = {
   disabled?: boolean;
+  inputRef?: Ref<HTMLInputElement>;
   onAdd: (title: string, listRole: ListRole) => Promise<void>;
 };
 
-export function TaskInput({ disabled, onAdd }: Props) {
+export function TaskInput({ disabled, inputRef, onAdd }: Props) {
   const { t } = useI18n();
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,6 +43,7 @@ export function TaskInput({ disabled, onAdd }: Props) {
     <label className="task-input">
       <Plus size={18} />
       <input
+        ref={inputRef}
         value={title}
         disabled={disabled || busy}
         placeholder={t("task.addPlaceholder")}

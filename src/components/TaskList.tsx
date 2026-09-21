@@ -1,20 +1,18 @@
-import type { ListRole, Task } from "../lib/types";
+import type { Task } from "../lib/types";
 import { useI18n } from "../lib/i18n";
 import { TaskItem } from "./TaskItem";
 
 type Props = {
   tasks: Task[];
-  listName?: string;
-  listRole?: ListRole | null;
   completingIds: Set<string>;
   onComplete: (taskId: string) => void;
   onOpenDetails: (task: Task) => void;
   unavailable?: boolean;
+  onAddTask?: () => void;
 };
 
-export function TaskList({ tasks, listName, listRole, completingIds, onComplete, onOpenDetails, unavailable }: Props) {
+export function TaskList({ tasks, completingIds, onComplete, onOpenDetails, unavailable, onAddTask }: Props) {
   const { t } = useI18n();
-  const displayName = displayListName(listName, listRole, t);
 
   if (unavailable) {
     return <div className="empty-state"><span>{t("widget.listUnavailable")}</span></div>;
@@ -23,7 +21,12 @@ export function TaskList({ tasks, listName, listRole, completingIds, onComplete,
   if (tasks.length === 0) {
     return (
       <div className="empty-state">
-        <span>{t("task.empty", { listName: displayName })}</span>
+        <span>{t("task.empty")}</span>
+        {onAddTask ? (
+          <button className="empty-state__action" type="button" onClick={onAddTask}>
+            {t("task.add")}
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -41,15 +44,4 @@ export function TaskList({ tasks, listName, listRole, completingIds, onComplete,
       ))}
     </ul>
   );
-}
-
-function displayListName(
-  listName: string | undefined,
-  listRole: ListRole | null | undefined,
-  t: ReturnType<typeof useI18n>["t"],
-) {
-  if (listRole === "today") return t("app.today");
-  if (listRole === "inbox") return t("app.inbox");
-  if (listRole === "this_week") return t("app.thisWeek");
-  return listName || t("task.thisList");
 }

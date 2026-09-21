@@ -1,7 +1,8 @@
-import { Trash2 } from "lucide-react";
+import { useRef } from "react";
 import { useI18n } from "../lib/i18n";
 import type { ThemeCssVariables } from "../lib/themeRuntime";
 import type { Task, TaskList, WidgetPane } from "../lib/types";
+import { classifyPanePresentation } from "../lib/widgetPresentation";
 import { TaskInput } from "./TaskInput";
 import { TaskList as TaskListView } from "./TaskList";
 
@@ -11,13 +12,11 @@ type Props = {
   lists: TaskList[];
   tasks: Task[];
   completingIds: Set<string>;
-  canDelete: boolean;
   themeStyle?: ThemeCssVariables;
   onSelectList: (paneId: string, listId: string) => void;
   onAdd: (pane: WidgetPane, title: string) => Promise<void>;
   onComplete: (taskId: string) => void;
   onOpenDetails: (task: Task) => void;
-  onDelete: (paneId: string) => void;
 };
 
 export function WidgetPaneView({
@@ -26,16 +25,20 @@ export function WidgetPaneView({
   lists,
   tasks,
   completingIds,
-  canDelete,
   themeStyle,
   onSelectList,
   onAdd,
   onComplete,
   onOpenDetails,
-  onDelete,
 }: Props) {
   const { t } = useI18n();
-  const listMissing = Boolean(pane.listId && !list);
+  const taskInputRef = useRef<HTMLInputElement>(null);
+  const presentation = classifyPanePresentation({
+    paneListId: pane.listId,
+    listExists: Boolean(list),
+    taskCount: tasks.length,
+  });
+  const listMissing = presentation === "missing-list";
   const title = pane.titleOverride?.trim() ||
     (list ? displayListName(list, t) : listMissing ? t("pane.listUnavailable") : t("pane.selectList"));
 
@@ -66,16 +69,6 @@ export function WidgetPaneView({
             </option>
           ))}
         </select>
-        <button
-          className="icon-button icon-button--danger"
-          type="button"
-          disabled={!canDelete}
-          title={canDelete ? t("pane.remove") : t("pane.atLeastOne")}
-          aria-label={t("pane.removeNamed", { name: title })}
-          onClick={() => onDelete(pane.id)}
-        >
-          <Trash2 size={15} />
-        </button>
       </header>
 
       {!list ? (
@@ -84,14 +77,13 @@ export function WidgetPaneView({
         </div>
       ) : (
         <>
-          <TaskInput onAdd={(title) => onAdd(pane, title)} />
+          <TaskInput inputRef={taskInputRef} onAdd={(title) => onAdd(pane, title)} />
           <TaskListView
             tasks={tasks}
-            listName={list.displayName}
-            listRole={list.role}
             completingIds={completingIds}
             onComplete={onComplete}
             onOpenDetails={onOpenDetails}
+            onAddTask={() => taskInputRef.current?.focus()}
           />
         </>
       )}
