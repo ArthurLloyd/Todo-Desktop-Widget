@@ -11,8 +11,9 @@ import type {
   WidgetInstance,
   WidgetInstanceInput,
   WidgetContext,
+  WidgetLayoutMode,
   WidgetPane,
-  WidgetPaneInput,
+  WidgetTaskSnapshot,
   WidgetTheme,
   WidgetThemeInput,
 } from "./types";
@@ -85,6 +86,18 @@ export const api = {
       "get_tasks_for_list",
       { listId },
       mockTasks.filter((task) => task.listId === listId),
+    ),
+  getLocalWidgetSnapshot: () =>
+    call<WidgetTaskSnapshot>(
+      "get_local_widget_snapshot",
+      undefined,
+      {
+        taskLists: mockLists,
+        tasks: mockTasks,
+        inboxCount: mockTasks.filter(
+          (task) => task.listId === "inbox" && task.status !== "completed",
+        ).length,
+      },
     ),
   addTaskToList: async (title: string, listId: string) => {
     try {
@@ -207,12 +220,6 @@ export const api = {
     call<void>("delete_widget_instance", { id }),
   listWidgetPanes: (widgetInstanceId: string) =>
     call<WidgetPane[]>("list_widget_panes", { widgetInstanceId }),
-  createWidgetPane: (input: WidgetPaneInput) =>
-    call<WidgetPane>("create_widget_pane", { input }),
-  updateWidgetPane: (id: string, input: WidgetPaneInput) =>
-    call<WidgetPane>("update_widget_pane", { id, input }),
-  deleteWidgetPane: (id: string) =>
-    call<void>("delete_widget_pane", { id }),
   listWidgetThemes: () => call<WidgetTheme[]>("list_widget_themes"),
   getWidgetTheme: (id: string) => call<WidgetTheme>("get_widget_theme", { id }),
   createWidgetTheme: (input: WidgetThemeInput) =>
@@ -223,6 +230,16 @@ export const api = {
   resolveWidgetPaneTheme: (paneId: string) =>
     call<WidgetTheme>("resolve_widget_pane_theme", { paneId }),
   getCurrentWidgetContext: () => call<WidgetContext>("get_current_widget_context"),
+  createCurrentWidgetPane: (listId?: string | null) =>
+    call<WidgetPane>("create_current_widget_pane", { listId: listId ?? null }),
+  setCurrentWidgetPaneList: (paneId: string, listId?: string | null) =>
+    call<WidgetPane>("set_current_widget_pane_list", { paneId, listId: listId ?? null }),
+  deleteCurrentWidgetPane: (paneId: string) =>
+    call<void>("delete_current_widget_pane", { paneId }),
+  updateCurrentWidgetLayout: (layoutMode: WidgetLayoutMode) =>
+    call<WidgetInstance>("update_current_widget_layout", { layoutMode }),
+  updateCurrentWidgetName: (name: string) =>
+    call<WidgetInstance>("update_current_widget_name", { name }),
   createWidgetWindow: (initialListId?: string | null) =>
     call<WidgetInstance>("create_widget_window", { initialListId: initialListId ?? null }),
   openWidgetWindow: (instanceId: string) =>

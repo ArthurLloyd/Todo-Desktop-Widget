@@ -2,17 +2,14 @@ import { ArrowDownUp, Pin, PinOff, RefreshCw, Settings } from "lucide-react";
 import clsx from "clsx";
 import type { PointerEvent } from "react";
 import { useI18n } from "../lib/i18n";
-import type { SortMode, SyncStatus, TaskList } from "../lib/types";
+import type { SortMode, SyncStatus } from "../lib/types";
 
 type Props = {
   isPinned: boolean;
-  taskLists: TaskList[];
-  selectedListId?: string | null;
-  listUnavailable?: boolean;
+  widgetName: string;
   sortMode: SortMode;
   syncStatus: SyncStatus;
   onDragStart: () => void;
-  onSelectList: (listId: string) => void;
   onSelectSort: (sortMode: SortMode) => void;
   onRefresh: () => void;
   onTogglePinned: () => void;
@@ -21,13 +18,10 @@ type Props = {
 
 export function TitleBar({
   isPinned,
-  taskLists,
-  selectedListId,
-  listUnavailable,
+  widgetName,
   sortMode,
   syncStatus,
   onDragStart,
-  onSelectList,
   onSelectSort,
   onRefresh,
   onTogglePinned,
@@ -45,25 +39,9 @@ export function TitleBar({
   return (
     <header className="titlebar" data-tauri-drag-region onPointerDown={handlePointerDown}>
       <div className="titlebar__copy" data-tauri-drag-region>
-        {taskLists.length > 0 ? (
-          <select
-            className="list-select"
-            value={selectedListId || ""}
-            title={t("title.taskList")}
-            onChange={(event) => onSelectList(event.target.value)}
-          >
-            {listUnavailable && <option value="">{t("widget.listUnavailableShort")}</option>}
-            {taskLists.map((list) => (
-              <option key={list.id} value={list.id}>
-                {displayListName(list, t)}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span className="titlebar__title" data-tauri-drag-region>
-            {t("app.today")}
-          </span>
-        )}
+        <span className="titlebar__title" data-tauri-drag-region>
+          {widgetName}
+        </span>
         <span className={clsx("status-dot", `status-dot--${syncStatus.state}`)} />
       </div>
       <div className="titlebar__actions">
@@ -91,11 +69,4 @@ export function TitleBar({
       </div>
     </header>
   );
-}
-
-function displayListName(list: TaskList, t: ReturnType<typeof useI18n>["t"]) {
-  if (list.role === "today") return t("app.today");
-  if (list.role === "inbox") return t("app.inbox");
-  if (list.role === "this_week") return t("app.thisWeek");
-  return list.displayName;
 }

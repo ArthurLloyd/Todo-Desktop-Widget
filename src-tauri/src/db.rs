@@ -308,6 +308,23 @@ pub fn list_tasks_for_list(conn: &Connection, list_id: &str) -> anyhow::Result<V
     Ok(tasks)
 }
 
+pub fn list_all_tasks(conn: &Connection) -> anyhow::Result<Vec<TaskDto>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {TASK_COLUMNS}
+         FROM tasks
+         WHERE pending_delete = 0
+         ORDER BY status = 'completed' ASC, dirty DESC,
+                  COALESCE(modified_at, local_created_at) DESC",
+    ))?;
+
+    let rows = stmt.query_map([], row_to_task)?;
+    let mut tasks = Vec::new();
+    for row in rows {
+        tasks.push(row?);
+    }
+    Ok(tasks)
+}
+
 pub fn inbox_count(conn: &Connection) -> anyhow::Result<i64> {
     conn.query_row(
         "SELECT COUNT(*)

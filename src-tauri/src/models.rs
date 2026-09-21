@@ -223,6 +223,20 @@ pub struct WidgetContextDto {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WidgetTaskSnapshotDto {
+    pub task_lists: Vec<TaskListDto>,
+    pub tasks: Vec<TaskDto>,
+    pub inbox_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetConfigChangedDto {
+    pub widget_instance_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WidgetThemeDto {
     pub id: String,
     pub name: String,
@@ -251,6 +265,20 @@ pub struct AuthStatusDto {
 pub struct LoginStartDto {
     pub auth_url: String,
     pub message: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WidgetConfigChangedDto;
+
+    #[test]
+    fn widget_config_event_targets_one_instance() {
+        let payload = WidgetConfigChangedDto {
+            widget_instance_id: "widget-a".to_string(),
+        };
+        let value = serde_json::to_value(payload).expect("serialize event payload");
+        assert_eq!(value["widgetInstanceId"], "widget-a");
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

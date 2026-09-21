@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    models::{WidgetContextDto, WidgetInstanceDto},
+    models::{WidgetConfigChangedDto, WidgetContextDto, WidgetInstanceDto},
     widget_config,
     widget_window_identity::{widget_id_from_window_label, widget_window_label, OpeningRegistry},
     AppState,
@@ -43,12 +43,6 @@ pub fn resolve_widget_context(
         return Err("window label does not match the widget instance".to_string());
     }
     let panes = widget_config::list_widget_panes(&conn, &instance.id).map_err(to_string)?;
-    if panes.len() > 1 {
-        eprintln!(
-            "[widget-window] {} has multiple panes configured; 4B renders first pane only",
-            instance.id
-        );
-    }
     Ok(WidgetContextDto { instance, panes })
 }
 
@@ -136,7 +130,7 @@ pub async fn close_secondary_widget(window: &WebviewWindow) -> Result<(), String
         persist_geometry(window)?;
         crate::desktop_window::set_widget_window_mode(window, "normal").await?;
         mark_open(window.app_handle(), &instance_id, false)?;
-        let _ = window.app_handle().emit("widget-config-changed", ());
+        emit_widget_config_changed(window.app_handle(), &instance_id);
         crate::desktop_window::remove_window_state(window.app_handle(), window.label());
         window.close().map_err(to_string)
     }
@@ -147,6 +141,17 @@ pub async fn close_secondary_widget(window: &WebviewWindow) -> Result<(), String
         }
     }
     close_result
+}
+
+pub fn emit_widget_config_changed(app: &AppHandle, widget_instance_id: &str) {
+    if let Err(error) = app.emit(
+        "widget-config-changed",
+        WidgetConfigChangedDto {
+            widget_instance_id: widget_instance_id.to_string(),
+        },
+    ) {
+        eprintln!("[widget-window] failed to emit widget-config-changed: {error}");
+    }
 }
 
 pub fn should_intercept_close(app: &AppHandle, label: &str) -> bool {

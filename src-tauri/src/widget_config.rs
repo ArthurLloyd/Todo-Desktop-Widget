@@ -372,6 +372,116 @@ pub fn update_first_pane_list(
     get_widget_pane(conn, &pane_id)
 }
 
+pub fn create_pane_for_widget(
+    conn: &Connection,
+    widget_instance_id: &str,
+    list_id: Option<&str>,
+) -> anyhow::Result<WidgetPaneDto> {
+    ensure_widget_exists(conn, widget_instance_id)?;
+    if let Some(list_id) = list_id {
+        ensure_task_list_exists(conn, list_id)?;
+    }
+    let next_sort_order: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(sort_order), -1) + 1
+         FROM widget_panes WHERE widget_instance_id = ?1",
+        params![widget_instance_id],
+        |row| row.get(0),
+    )?;
+    create_widget_pane(
+        conn,
+        &WidgetPaneInput {
+            widget_instance_id: widget_instance_id.to_string(),
+            list_id: list_id.map(str::to_string),
+            title_override: None,
+            theme_id: None,
+            sort_order: next_sort_order,
+            show_completed: None,
+            max_tasks: None,
+        },
+    )
+}
+
+pub fn set_widget_pane_list_for_widget(
+    conn: &Connection,
+    widget_instance_id: &str,
+    pane_id: &str,
+    list_id: Option<&str>,
+) -> anyhow::Result<WidgetPaneDto> {
+    ensure_pane_belongs_to_widget(conn, pane_id, widget_instance_id)?;
+    if let Some(list_id) = list_id {
+        ensure_task_list_exists(conn, list_id)?;
+    }
+    conn.execute(
+        "UPDATE widget_panes SET list_id = ?2, updated_at = ?3 WHERE id = ?1",
+        params![
+            pane_id,
+            normalize_optional_text(list_id),
+            Utc::now().to_rfc3339()
+        ],
+    )?;
+    get_widget_pane(conn, pane_id)
+}
+
+pub fn delete_widget_pane_for_widget(
+    conn: &Connection,
+    widget_instance_id: &str,
+    pane_id: &str,
+) -> anyhow::Result<()> {
+    let transaction = conn.unchecked_transaction()?;
+    ensure_pane_belongs_to_widget(&transaction, pane_id, widget_instance_id)?;
+    let pane_count: i64 = transaction.query_row(
+        "SELECT COUNT(*) FROM widget_panes WHERE widget_instance_id = ?1",
+        params![widget_instance_id],
+        |row| row.get(0),
+    )?;
+    if pane_count <= 1 {
+        bail!("widget must contain at least one pane");
+    }
+    delete_widget_pane(&transaction, pane_id)?;
+    transaction.commit()?;
+    Ok(())
+}
+
+pub fn set_widget_layout_mode(
+    conn: &Connection,
+    widget_instance_id: &str,
+    layout_mode: WidgetLayoutMode,
+) -> anyhow::Result<WidgetInstanceDto> {
+    if conn.execute(
+        "UPDATE widget_instances SET layout_mode = ?2, updated_at = ?3 WHERE id = ?1",
+        params![
+            widget_instance_id,
+            layout_mode.as_str(),
+            Utc::now().to_rfc3339()
+        ],
+    )? == 0
+    {
+        bail!("widget instance not found");
+    }
+    get_widget_instance(conn, widget_instance_id)
+}
+
+pub fn set_widget_name(
+    conn: &Connection,
+    widget_instance_id: &str,
+    name: &str,
+) -> anyhow::Result<WidgetInstanceDto> {
+    let name = validate_name(name, "widget name")?;
+    if conn.execute(
+        "UPDATE widget_instances SET name = ?2, updated_at = ?3 WHERE id = ?1",
+        params![widget_instance_id, name, Utc::now().to_rfc3339()],
+    )? == 0
+    {
+        bail!("widget instance not found");
+    }
+    get_widget_instance(conn, widget_instance_id)
+}
+
+#[cfg(test)]
+fn effective_show_completed(pane_value: Option<bool>, global_value: bool) -> bool {
+    pane_value.unwrap_or(global_value)
+}
+
 pub fn create_widget_instance(
     conn: &Connection,
     input: &WidgetInstanceInput,
@@ -517,6 +627,19 @@ pub fn update_widget_pane(
         bail!("widget pane not found");
     }
     get_widget_pane(conn, id)
+}
+
+pub fn update_widget_pane_for_widget(
+    conn: &Connection,
+    widget_instance_id: &str,
+    pane_id: &str,
+    input: &WidgetPaneInput,
+) -> anyhow::Result<WidgetPaneDto> {
+    ensure_pane_belongs_to_widget(conn, pane_id, widget_instance_id)?;
+    if input.widget_instance_id != widget_instance_id {
+        bail!("widget pane does not belong to the current widget");
+    }
+    update_widget_pane(conn, pane_id, input)
 }
 
 pub fn delete_widget_pane(conn: &Connection, id: &str) -> anyhow::Result<()> {
@@ -835,6 +958,37 @@ fn ensure_widget_exists(conn: &Connection, id: &str) -> anyhow::Result<()> {
     )?;
     if !exists {
         bail!("widget instance not found");
+    }
+    Ok(())
+}
+
+fn ensure_pane_belongs_to_widget(
+    conn: &Connection,
+    pane_id: &str,
+    widget_instance_id: &str,
+) -> anyhow::Result<()> {
+    let owner: Option<String> = conn
+        .query_row(
+            "SELECT widget_instance_id FROM widget_panes WHERE id = ?1",
+            params![pane_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    match owner {
+        Some(owner) if owner == widget_instance_id => Ok(()),
+        Some(_) => bail!("widget pane does not belong to the current widget"),
+        None => bail!("widget pane not found"),
+    }
+}
+
+fn ensure_task_list_exists(conn: &Connection, list_id: &str) -> anyhow::Result<()> {
+    let exists: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM task_lists WHERE id = ?1)",
+        params![list_id],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        bail!("task list not found");
     }
     Ok(())
 }
@@ -1256,6 +1410,113 @@ mod tests {
                 .as_deref(),
             Some("local-today")
         );
+    }
+
+    #[test]
+    fn current_widget_helpers_create_and_order_panes() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+
+        let second =
+            create_pane_for_widget(&conn, DEFAULT_WIDGET_ID, None).expect("create second pane");
+        let third = create_pane_for_widget(&conn, DEFAULT_WIDGET_ID, Some("local-inbox"))
+            .expect("create third pane");
+
+        assert_eq!(second.sort_order, 1);
+        assert_eq!(third.sort_order, 2);
+        assert_eq!(third.list_id.as_deref(), Some("local-inbox"));
+    }
+
+    #[test]
+    fn current_widget_helpers_reject_another_widgets_pane() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        let secondary =
+            create_widget_with_default_pane(&conn, None).expect("create secondary widget");
+        let secondary_pane = list_widget_panes(&conn, &secondary.id).unwrap()[0].clone();
+
+        let error = set_widget_pane_list_for_widget(
+            &conn,
+            DEFAULT_WIDGET_ID,
+            &secondary_pane.id,
+            Some("local-inbox"),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("current widget"));
+        assert!(get_widget_pane(&conn, &secondary_pane.id)
+            .unwrap()
+            .list_id
+            .is_none());
+    }
+
+    #[test]
+    fn current_widget_cannot_delete_its_last_pane() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+
+        let error =
+            delete_widget_pane_for_widget(&conn, DEFAULT_WIDGET_ID, DEFAULT_PANE_ID).unwrap_err();
+
+        assert!(error.to_string().contains("at least one pane"));
+        assert_eq!(
+            list_widget_panes(&conn, DEFAULT_WIDGET_ID).unwrap().len(),
+            1
+        );
+    }
+
+    #[test]
+    fn current_widget_pane_delete_keeps_tasks_and_lists() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        let task = db::insert_local_task(&conn, "Keep me", "inbox").expect("insert task");
+        let second = create_pane_for_widget(&conn, DEFAULT_WIDGET_ID, Some("local-inbox"))
+            .expect("create second pane");
+
+        delete_widget_pane_for_widget(&conn, DEFAULT_WIDGET_ID, &second.id)
+            .expect("delete second pane");
+
+        assert!(db::get_task(&conn, &task.id).is_ok());
+        assert!(db::list_id_for_role(&conn, "inbox").is_ok());
+    }
+
+    #[test]
+    fn layout_mode_persists_for_current_widget() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+
+        set_widget_layout_mode(&conn, DEFAULT_WIDGET_ID, WidgetLayoutMode::Grid)
+            .expect("set grid layout");
+
+        assert_eq!(
+            get_widget_instance(&conn, DEFAULT_WIDGET_ID)
+                .unwrap()
+                .layout_mode,
+            WidgetLayoutMode::Grid
+        );
+    }
+
+    #[test]
+    fn show_completed_inherits_global_value() {
+        assert!(!effective_show_completed(None, false));
+        assert!(effective_show_completed(None, true));
+        assert!(effective_show_completed(Some(true), false));
+        assert!(!effective_show_completed(Some(false), true));
+    }
+
+    #[test]
+    fn pane_max_tasks_validation_still_applies() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        let error = create_widget_pane(
+            &conn,
+            &WidgetPaneInput {
+                max_tasks: Some(0),
+                ..pane_input(DEFAULT_WIDGET_ID, None, 1)
+            },
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("maxTasks"));
     }
 
     #[test]

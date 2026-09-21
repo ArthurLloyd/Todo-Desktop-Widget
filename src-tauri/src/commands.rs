@@ -7,7 +7,8 @@ use crate::{
     models::{
         AuthStatusDto, LoginStartDto, SettingsDto, SettingsPatch, SyncStatusDto, TaskDto,
         TaskListDto, TaskPatchDto, WidgetContextDto, WidgetInstanceDto, WidgetInstanceInput,
-        WidgetPaneDto, WidgetPaneInput, WidgetThemeDto, WidgetThemeInput,
+        WidgetLayoutMode, WidgetPaneDto, WidgetPaneInput, WidgetTaskSnapshotDto, WidgetThemeDto,
+        WidgetThemeInput,
     },
     settings,
     sync_coordinator::GlobalSyncReason,
@@ -42,6 +43,21 @@ pub fn get_tasks_for_list(
         .lock()
         .map_err(|_| "database lock poisoned".to_string())?;
     db::list_tasks_for_list(&conn, &list_id).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn get_local_widget_snapshot(
+    state: State<'_, AppState>,
+) -> Result<WidgetTaskSnapshotDto, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    Ok(WidgetTaskSnapshotDto {
+        task_lists: db::list_task_lists(&conn).map_err(to_string)?,
+        tasks: db::list_all_tasks(&conn).map_err(to_string)?,
+        inbox_count: db::inbox_count(&conn).map_err(to_string)?,
+    })
 }
 
 #[tauri::command]
@@ -433,36 +449,60 @@ pub fn list_widget_panes(
 
 #[tauri::command]
 pub fn create_widget_pane(
+    window: WebviewWindow,
     state: State<'_, AppState>,
     input: WidgetPaneInput,
 ) -> Result<WidgetPaneDto, String> {
+    let context = widget_window::resolve_widget_context(&window, &state)?;
+    if input.widget_instance_id != context.instance.id {
+        return Err("widget pane does not belong to the current widget".to_string());
+    }
     let conn = state
         .db
         .lock()
         .map_err(|_| "database lock poisoned".to_string())?;
-    widget_config::create_widget_pane(&conn, &input).map_err(to_string)
+    let pane = widget_config::create_widget_pane(&conn, &input).map_err(to_string)?;
+    drop(conn);
+    widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
+    Ok(pane)
 }
 
 #[tauri::command]
 pub fn update_widget_pane(
+    window: WebviewWindow,
     state: State<'_, AppState>,
     id: String,
     input: WidgetPaneInput,
 ) -> Result<WidgetPaneDto, String> {
+    let context = widget_window::resolve_widget_context(&window, &state)?;
     let conn = state
         .db
         .lock()
         .map_err(|_| "database lock poisoned".to_string())?;
-    widget_config::update_widget_pane(&conn, &id, &input).map_err(to_string)
+    let pane =
+        widget_config::update_widget_pane_for_widget(&conn, &context.instance.id, &id, &input)
+            .map_err(to_string)?;
+    drop(conn);
+    widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
+    Ok(pane)
 }
 
 #[tauri::command]
-pub fn delete_widget_pane(state: State<'_, AppState>, id: String) -> Result<(), String> {
+pub fn delete_widget_pane(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    let context = widget_window::resolve_widget_context(&window, &state)?;
     let conn = state
         .db
         .lock()
         .map_err(|_| "database lock poisoned".to_string())?;
-    widget_config::delete_widget_pane(&conn, &id).map_err(to_string)
+    widget_config::delete_widget_pane_for_widget(&conn, &context.instance.id, &id)
+        .map_err(to_string)?;
+    drop(conn);
+    widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
+    Ok(())
 }
 
 #[tauri::command]
@@ -538,6 +578,106 @@ pub fn get_current_widget_context(
 }
 
 #[tauri::command]
+pub fn create_current_widget_pane(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    list_id: Option<String>,
+) -> Result<WidgetPaneDto, String> {
+    let context = widget_window::resolve_widget_context(&window, &state)?;
+    let pane = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::create_pane_for_widget(&conn, &context.instance.id, list_id.as_deref())
+            .map_err(to_string)?
+    };
+    widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
+    Ok(pane)
+}
+
+#[tauri::command]
+pub fn set_current_widget_pane_list(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    pane_id: String,
+    list_id: Option<String>,
+) -> Result<WidgetPaneDto, String> {
+    let context = widget_window::resolve_widget_context(&window, &state)?;
+    let pane = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::set_widget_pane_list_for_widget(
+            &conn,
+            &context.instance.id,
+            &pane_id,
+            list_id.as_deref(),
+        )
+        .map_err(to_string)?
+    };
+    widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
+    Ok(pane)
+}
+
+#[tauri::command]
+pub fn delete_current_widget_pane(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    pane_id: String,
+) -> Result<(), String> {
+    let context = widget_window::resolve_widget_context(&window, &state)?;
+    {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::delete_widget_pane_for_widget(&conn, &context.instance.id, &pane_id)
+            .map_err(to_string)?;
+    }
+    widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_current_widget_layout(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    layout_mode: WidgetLayoutMode,
+) -> Result<WidgetInstanceDto, String> {
+    let context = widget_window::resolve_widget_context(&window, &state)?;
+    let instance = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::set_widget_layout_mode(&conn, &context.instance.id, layout_mode)
+            .map_err(to_string)?
+    };
+    widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
+    Ok(instance)
+}
+
+#[tauri::command]
+pub fn update_current_widget_name(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<WidgetInstanceDto, String> {
+    let context = widget_window::resolve_widget_context(&window, &state)?;
+    let instance = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::set_widget_name(&conn, &context.instance.id, &name).map_err(to_string)?
+    };
+    widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
+    Ok(instance)
+}
+
+#[tauri::command]
 pub async fn create_widget_window(
     app: AppHandle,
     window: WebviewWindow,
@@ -568,22 +708,20 @@ pub async fn create_widget_window(
         widget_config::get_widget_instance(&conn, &instance.id).map_err(to_string)?
     };
     widget_window::open_widget_window(&app, &instance.id).await?;
-    let _ = app.emit("widget-config-changed", ());
+    widget_window::emit_widget_config_changed(&app, &instance.id);
     Ok(instance)
 }
 
 #[tauri::command]
 pub async fn open_widget_window(app: AppHandle, instance_id: String) -> Result<(), String> {
     widget_window::open_widget_window(&app, &instance_id).await?;
-    let _ = app.emit("widget-config-changed", ());
+    widget_window::emit_widget_config_changed(&app, &instance_id);
     Ok(())
 }
 
 #[tauri::command]
 pub async fn close_current_widget_window(window: WebviewWindow) -> Result<(), String> {
-    let app = window.app_handle().clone();
     widget_window::close_secondary_widget(&window).await?;
-    let _ = app.emit("widget-config-changed", ());
     Ok(())
 }
 
@@ -598,7 +736,11 @@ pub fn update_current_widget_list(
         .db
         .lock()
         .map_err(|_| "database lock poisoned".to_string())?;
-    widget_config::update_first_pane_list(&conn, &context.instance.id, &list_id).map_err(to_string)
+    let pane = widget_config::update_first_pane_list(&conn, &context.instance.id, &list_id)
+        .map_err(to_string)?;
+    drop(conn);
+    widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
+    Ok(pane)
 }
 
 #[tauri::command]
@@ -650,7 +792,7 @@ pub async fn set_window_mode(
             .map_err(|_| "database lock poisoned".to_string())?;
         widget_config::set_widget_pinned(&conn, &context.instance.id, mode == "pinned")
             .map_err(to_string)?;
-        let _ = window.app_handle().emit("widget-config-changed", ());
+        widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
     }
     Ok(())
 }

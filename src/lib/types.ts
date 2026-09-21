@@ -112,6 +112,16 @@ export type WidgetContext = {
   panes: WidgetPane[];
 };
 
+export type WidgetTaskSnapshot = {
+  taskLists: TaskList[];
+  tasks: Task[];
+  inboxCount: number;
+};
+
+export type WidgetConfigChanged = {
+  widgetInstanceId: string;
+};
+
 export type WidgetInstanceInput = {
   name: string;
   layoutMode: WidgetLayoutMode;

@@ -1,6 +1,6 @@
-import { ExternalLink, LogIn, LogOut, Plus, RotateCcw, UserCircle, X } from "lucide-react";
+import { ExternalLink, LogIn, LogOut, Plus, RotateCcw, Trash2, UserCircle, X } from "lucide-react";
 import { localizeBackendMessage, useI18n } from "../lib/i18n";
-import type { AuthStatus, Settings, WidgetInstance } from "../lib/types";
+import type { AuthStatus, Settings, TaskList, WidgetContext, WidgetInstance, WidgetLayoutMode } from "../lib/types";
 
 type Props = {
   open: boolean;
@@ -17,6 +17,14 @@ type Props = {
   onCreateWidget: () => void;
   onOpenWidget: (instanceId: string) => void;
   onCloseWidget?: () => void;
+  currentWidget: WidgetContext | null;
+  taskLists: TaskList[];
+  configError?: string | null;
+  onRenameWidget: (name: string) => void;
+  onChangeLayout: (layoutMode: WidgetLayoutMode) => void;
+  onAddPane: () => void;
+  onSelectPaneList: (paneId: string, listId: string) => void;
+  onDeletePane: (paneId: string) => void;
 };
 
 export function SettingsPanel({
@@ -34,6 +42,14 @@ export function SettingsPanel({
   onCreateWidget,
   onOpenWidget,
   onCloseWidget,
+  currentWidget,
+  taskLists,
+  configError,
+  onRenameWidget,
+  onChangeLayout,
+  onAddPane,
+  onSelectPaneList,
+  onDeletePane,
 }: Props) {
   const { t } = useI18n();
 
@@ -187,6 +203,86 @@ export function SettingsPanel({
           </button>
         )}
       </section>
+
+      {currentWidget && (
+        <section className="settings-group pane-manager">
+          <strong>{t("pane.currentWidget")}</strong>
+          <label className="settings-row">
+            <span>{t("pane.windowName")}</span>
+            <input
+              key={currentWidget.instance.name}
+              className="settings-text-input"
+              defaultValue={currentWidget.instance.name}
+              aria-label={t("pane.windowName")}
+              onBlur={(event) => onRenameWidget(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+            />
+          </label>
+          <label className="settings-row">
+            <span>{t("pane.layout")}</span>
+            <select
+              value={currentWidget.instance.layoutMode}
+              onChange={(event) => onChangeLayout(event.target.value as WidgetLayoutMode)}
+            >
+              <option value="single">{t("pane.layoutSingle")}</option>
+              <option value="columns">{t("pane.layoutColumns")}</option>
+              <option value="rows">{t("pane.layoutRows")}</option>
+              <option value="grid">{t("pane.layoutGrid")}</option>
+            </select>
+          </label>
+          {currentWidget.instance.layoutMode === "single" && currentWidget.panes.length > 1 && (
+            <span className="settings-hint">{t("pane.singleHint")}</span>
+          )}
+          <div className="pane-manager__heading">
+            <span>{t("pane.sections")}</span>
+            <button className="text-button" type="button" onClick={onAddPane}>
+              <Plus size={15} />
+              {t("pane.add")}
+            </button>
+          </div>
+          <div className="pane-manager__list">
+            {currentWidget.panes.map((pane) => {
+              const list = taskLists.find((item) => item.id === pane.listId);
+              const name = pane.titleOverride || list?.displayName ||
+                (pane.listId ? t("pane.listUnavailable") : t("pane.selectList"));
+              return (
+                <div className="pane-manager__item" key={pane.id}>
+                  <span>{name}</span>
+                  <select
+                    aria-label={t("pane.listSelector", { name })}
+                    value={list?.id || ""}
+                    onChange={(event) => {
+                      if (event.target.value) onSelectPaneList(pane.id, event.target.value);
+                    }}
+                  >
+                    <option value="" disabled>
+                      {pane.listId ? t("pane.listUnavailable") : t("pane.selectList")}
+                    </option>
+                    {taskLists.map((item) => (
+                      <option key={item.id} value={item.id}>{item.displayName}</option>
+                    ))}
+                  </select>
+                  <button
+                    className="icon-button icon-button--danger"
+                    type="button"
+                    disabled={currentWidget.panes.length <= 1}
+                    title={currentWidget.panes.length <= 1 ? t("pane.atLeastOne") : t("pane.remove")}
+                    aria-label={t("pane.removeNamed", { name })}
+                    onClick={() => onDeletePane(pane.id)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          {configError && (
+            <span className="settings-error">{localizeBackendMessage(configError, t)}</span>
+          )}
+        </section>
+      )}
 
       <button className="secondary-button" onClick={onEnsureLists}>
         <RotateCcw size={16} />
