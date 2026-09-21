@@ -121,6 +121,110 @@ pub struct SettingsPatch {
     pub font_scale: Option<f64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WidgetLayoutMode {
+    Single,
+    Columns,
+    Rows,
+    Grid,
+}
+
+impl WidgetLayoutMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Single => "single",
+            Self::Columns => "columns",
+            Self::Rows => "rows",
+            Self::Grid => "grid",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetThemeConfig {
+    pub version: u32,
+    pub background: String,
+    pub foreground: String,
+    pub secondary_text: String,
+    pub accent: String,
+    pub task_overdue: String,
+    pub task_due_today: String,
+    pub task_important: String,
+    pub task_pending: String,
+    pub task_completed: String,
+    pub background_opacity: f64,
+    pub blur_px: f64,
+    pub border_radius_px: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetInstanceDto {
+    /// Stable identity for persistence; 4B may derive `widget-{id}` labels from it.
+    /// The existing primary window remains labeled `main`.
+    pub id: String,
+    pub name: String,
+    pub layout_mode: WidgetLayoutMode,
+    pub default_theme_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetInstanceInput {
+    pub name: String,
+    pub layout_mode: WidgetLayoutMode,
+    pub default_theme_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetPaneDto {
+    pub id: String,
+    pub widget_instance_id: String,
+    pub list_id: Option<String>,
+    pub title_override: Option<String>,
+    pub theme_id: Option<String>,
+    pub sort_order: i64,
+    pub show_completed: Option<bool>,
+    pub max_tasks: Option<i64>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetPaneInput {
+    pub widget_instance_id: String,
+    pub list_id: Option<String>,
+    pub title_override: Option<String>,
+    pub theme_id: Option<String>,
+    pub sort_order: i64,
+    pub show_completed: Option<bool>,
+    pub max_tasks: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetThemeDto {
+    pub id: String,
+    pub name: String,
+    pub config: WidgetThemeConfig,
+    pub is_builtin: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetThemeInput {
+    pub name: String,
+    pub config: WidgetThemeConfig,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthStatusDto {

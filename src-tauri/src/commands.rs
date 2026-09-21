@@ -6,11 +6,12 @@ use crate::{
     auth, db, debug_console,
     models::{
         AuthStatusDto, LoginStartDto, SettingsDto, SettingsPatch, SyncStatusDto, TaskDto,
-        TaskListDto, TaskPatchDto,
+        TaskListDto, TaskPatchDto, WidgetInstanceDto, WidgetInstanceInput, WidgetPaneDto,
+        WidgetPaneInput, WidgetThemeDto, WidgetThemeInput,
     },
     settings,
     sync_coordinator::GlobalSyncReason,
-    widget_snapshot, AppState,
+    widget_config, widget_snapshot, AppState,
 };
 
 #[tauri::command]
@@ -344,6 +345,171 @@ pub fn update_settings(
             .notify_interval_changed(next.sync_interval_minutes);
     }
     Ok(next)
+}
+
+#[tauri::command]
+pub fn list_widget_instances(state: State<'_, AppState>) -> Result<Vec<WidgetInstanceDto>, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::list_widget_instances(&conn).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn get_widget_instance(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<WidgetInstanceDto, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::get_widget_instance(&conn, &id).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn create_widget_instance(
+    state: State<'_, AppState>,
+    input: WidgetInstanceInput,
+) -> Result<WidgetInstanceDto, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::create_widget_instance(&conn, &input).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn update_widget_instance(
+    state: State<'_, AppState>,
+    id: String,
+    input: WidgetInstanceInput,
+) -> Result<WidgetInstanceDto, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::update_widget_instance(&conn, &id, &input).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn delete_widget_instance(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::delete_widget_instance(&conn, &id).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn list_widget_panes(
+    state: State<'_, AppState>,
+    widget_instance_id: String,
+) -> Result<Vec<WidgetPaneDto>, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::list_widget_panes(&conn, &widget_instance_id).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn create_widget_pane(
+    state: State<'_, AppState>,
+    input: WidgetPaneInput,
+) -> Result<WidgetPaneDto, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::create_widget_pane(&conn, &input).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn update_widget_pane(
+    state: State<'_, AppState>,
+    id: String,
+    input: WidgetPaneInput,
+) -> Result<WidgetPaneDto, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::update_widget_pane(&conn, &id, &input).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn delete_widget_pane(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::delete_widget_pane(&conn, &id).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn list_widget_themes(state: State<'_, AppState>) -> Result<Vec<WidgetThemeDto>, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::list_widget_themes(&conn).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn get_widget_theme(state: State<'_, AppState>, id: String) -> Result<WidgetThemeDto, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::get_widget_theme(&conn, &id).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn create_widget_theme(
+    state: State<'_, AppState>,
+    input: WidgetThemeInput,
+) -> Result<WidgetThemeDto, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::create_widget_theme(&conn, &input).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn update_widget_theme(
+    state: State<'_, AppState>,
+    id: String,
+    input: WidgetThemeInput,
+) -> Result<WidgetThemeDto, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::update_widget_theme(&conn, &id, &input).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn delete_widget_theme(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::delete_widget_theme(&conn, &id).map_err(to_string)
+}
+
+#[tauri::command]
+pub fn resolve_widget_pane_theme(
+    state: State<'_, AppState>,
+    pane_id: String,
+) -> Result<WidgetThemeDto, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    widget_config::resolve_widget_pane_theme(&conn, &pane_id).map_err(to_string)
 }
 
 #[tauri::command]

@@ -1,5 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AuthStatus, ListRole, LoginStart, Settings, SyncStatus, Task, TaskList, TaskPatch } from "./types";
+import type {
+  AuthStatus,
+  ListRole,
+  LoginStart,
+  Settings,
+  SyncStatus,
+  Task,
+  TaskList,
+  TaskPatch,
+  WidgetInstance,
+  WidgetInstanceInput,
+  WidgetPane,
+  WidgetPaneInput,
+  WidgetTheme,
+  WidgetThemeInput,
+} from "./types";
 
 let mockTasks: Task[] = [
   {
@@ -180,6 +195,32 @@ export const api = {
       return mockSettings;
     }
   },
+  listWidgetInstances: () => call<WidgetInstance[]>("list_widget_instances"),
+  getWidgetInstance: (id: string) =>
+    call<WidgetInstance>("get_widget_instance", { id }),
+  createWidgetInstance: (input: WidgetInstanceInput) =>
+    call<WidgetInstance>("create_widget_instance", { input }),
+  updateWidgetInstance: (id: string, input: WidgetInstanceInput) =>
+    call<WidgetInstance>("update_widget_instance", { id, input }),
+  deleteWidgetInstance: (id: string) =>
+    call<void>("delete_widget_instance", { id }),
+  listWidgetPanes: (widgetInstanceId: string) =>
+    call<WidgetPane[]>("list_widget_panes", { widgetInstanceId }),
+  createWidgetPane: (input: WidgetPaneInput) =>
+    call<WidgetPane>("create_widget_pane", { input }),
+  updateWidgetPane: (id: string, input: WidgetPaneInput) =>
+    call<WidgetPane>("update_widget_pane", { id, input }),
+  deleteWidgetPane: (id: string) =>
+    call<void>("delete_widget_pane", { id }),
+  listWidgetThemes: () => call<WidgetTheme[]>("list_widget_themes"),
+  getWidgetTheme: (id: string) => call<WidgetTheme>("get_widget_theme", { id }),
+  createWidgetTheme: (input: WidgetThemeInput) =>
+    call<WidgetTheme>("create_widget_theme", { input }),
+  updateWidgetTheme: (id: string, input: WidgetThemeInput) =>
+    call<WidgetTheme>("update_widget_theme", { id, input }),
+  deleteWidgetTheme: (id: string) => call<void>("delete_widget_theme", { id }),
+  resolveWidgetPaneTheme: (paneId: string) =>
+    call<WidgetTheme>("resolve_widget_pane_theme", { paneId }),
   setWindowMode: async (mode: "normal" | "pinned" | "hidden") => {
     try {
       await invoke<void>("set_window_mode", { mode });

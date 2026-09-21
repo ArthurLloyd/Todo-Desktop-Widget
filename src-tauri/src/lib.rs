@@ -11,6 +11,7 @@ mod settings;
 mod sync;
 mod sync_coordinator;
 mod tray;
+mod widget_config;
 mod widget_snapshot;
 
 use std::{
@@ -49,6 +50,7 @@ impl AppState {
         let conn = Connection::open(db_path).context("failed to open sqlite cache")?;
         db::init_db(&conn)?;
         db::ensure_local_core_lists(&conn)?;
+        widget_config::bootstrap_defaults(&conn)?;
         let settings = db::load_settings(&conn)?;
         debug_console::apply(settings.debug_mode);
         let macos_app_group_id = config::macos_app_group_id(app);
@@ -125,6 +127,21 @@ pub fn run() {
             commands::get_inbox_count,
             commands::get_settings,
             commands::update_settings,
+            commands::list_widget_instances,
+            commands::get_widget_instance,
+            commands::create_widget_instance,
+            commands::update_widget_instance,
+            commands::delete_widget_instance,
+            commands::list_widget_panes,
+            commands::create_widget_pane,
+            commands::update_widget_pane,
+            commands::delete_widget_pane,
+            commands::list_widget_themes,
+            commands::get_widget_theme,
+            commands::create_widget_theme,
+            commands::update_widget_theme,
+            commands::delete_widget_theme,
+            commands::resolve_widget_pane_theme,
             commands::set_window_mode,
             commands::start_drag,
             commands::start_window_drag

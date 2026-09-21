@@ -71,6 +71,7 @@ pub fn init_db(conn: &Connection) -> anyhow::Result<()> {
     ensure_task_column(conn, "time_zone", "TEXT")?;
     ensure_task_column(conn, "is_reminder_on", "INTEGER NOT NULL DEFAULT 0")?;
     ensure_task_column(conn, "recurrence_json", "TEXT")?;
+    crate::widget_config::init_schema(conn)?;
 
     Ok(())
 }

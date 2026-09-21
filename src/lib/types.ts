@@ -73,6 +73,76 @@ export type Settings = {
   fontScale: number;
 };
 
+export type WidgetLayoutMode = "single" | "columns" | "rows" | "grid";
+
+export type WidgetThemeConfig = {
+  version: 1;
+  background: string;
+  foreground: string;
+  secondaryText: string;
+  accent: string;
+  taskOverdue: string;
+  taskDueToday: string;
+  taskImportant: string;
+  taskPending: string;
+  taskCompleted: string;
+  backgroundOpacity: number;
+  blurPx: number;
+  borderRadiusPx: number;
+};
+
+export type WidgetInstance = {
+  id: string;
+  name: string;
+  layoutMode: WidgetLayoutMode;
+  defaultThemeId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WidgetInstanceInput = {
+  name: string;
+  layoutMode: WidgetLayoutMode;
+  defaultThemeId?: string | null;
+};
+
+export type WidgetPane = {
+  id: string;
+  widgetInstanceId: string;
+  listId?: string | null;
+  titleOverride?: string | null;
+  themeId?: string | null;
+  sortOrder: number;
+  showCompleted?: boolean | null;
+  maxTasks?: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WidgetPaneInput = {
+  widgetInstanceId: string;
+  listId?: string | null;
+  titleOverride?: string | null;
+  themeId?: string | null;
+  sortOrder: number;
+  showCompleted?: boolean | null;
+  maxTasks?: number | null;
+};
+
+export type WidgetTheme = {
+  id: string;
+  name: string;
+  config: WidgetThemeConfig;
+  isBuiltin: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WidgetThemeInput = {
+  name: string;
+  config: WidgetThemeConfig;
+};
+
 export type AuthStatus = {
   loggedIn: boolean;
   account?: string | null;
