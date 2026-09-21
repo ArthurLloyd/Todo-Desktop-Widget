@@ -476,7 +476,11 @@ function TaskDetailsWindow({ taskId, windowLabel }: { taskId: string | null; win
       const updated = await api.updateTask(nextTaskId, patch);
       setTask(updated);
       await load();
-      await emit("task-updated", { taskId: nextTaskId });
+      try {
+        await emit("task-updated", { taskId: nextTaskId });
+      } catch (notificationError) {
+        console.warn("Task saved, but the main window refresh notification failed", notificationError);
+      }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError));
     } finally {
