@@ -1,7 +1,8 @@
-import { Bell, CalendarDays, Check, MoreHorizontal, Repeat } from "lucide-react";
+import { Bell, CalendarDays, Check, MoreHorizontal, Repeat, Star } from "lucide-react";
 import clsx from "clsx";
-import { formatTaskDate, taskDateKey } from "../lib/dates";
+import { formatTaskDate } from "../lib/dates";
 import { useI18n } from "../lib/i18n";
+import { classifyTaskVisualState } from "../lib/taskVisualState";
 import type { Task } from "../lib/types";
 
 type Props = {
@@ -13,8 +14,8 @@ type Props = {
 
 export function TaskItem({ task, completing, onComplete, onOpenDetails }: Props) {
   const { language, t } = useI18n();
-  const overdue = isDueTodayOrEarlier(task);
-  const completed = task.status === "completed";
+  const { completed, overdue, dueToday, important, localPending } =
+    classifyTaskVisualState(task);
 
   return (
     <li
@@ -22,6 +23,9 @@ export function TaskItem({ task, completing, onComplete, onOpenDetails }: Props)
         "task-item",
         completing && "task-item--completing",
         overdue && "task-item--overdue",
+        dueToday && "task-item--due-today",
+        important && "task-item--important",
+        localPending && "task-item--pending",
         completed && "task-item--completed",
       )}
     >
@@ -35,12 +39,26 @@ export function TaskItem({ task, completing, onComplete, onOpenDetails }: Props)
       </button>
       <span className="task-main">
         <span className="task-title">{task.title}</span>
-        {task.dueDateTime || task.isReminderOn || task.recurrence ? (
+        {important || task.dueDateTime || task.isReminderOn || task.recurrence ? (
           <span className="task-meta">
+            {important ? (
+              <span className="task-meta--important" title={t("task.important")}>
+                <Star size={12} fill="currentColor" aria-hidden="true" />
+                {t("task.important")}
+              </span>
+            ) : null}
             {task.dueDateTime ? (
-              <span className={clsx(overdue && "task-meta--overdue")} title={t("task.dueDate")}>
+              <span
+                className={clsx(
+                  overdue && "task-meta--overdue",
+                  dueToday && "task-meta--due-today",
+                )}
+                title={t("task.dueDate")}
+              >
                 <CalendarDays size={12} />
-                {formatTaskDate(task.dueDateTime, task.timeZone, language)}
+                {dueToday
+                  ? t("task.today")
+                  : formatTaskDate(task.dueDateTime, task.timeZone, language)}
               </span>
             ) : null}
             {task.isReminderOn ? (
@@ -56,22 +74,15 @@ export function TaskItem({ task, completing, onComplete, onOpenDetails }: Props)
           </span>
         ) : null}
       </span>
-      {completed ? <span className="task-state">{t("task.done")}</span> : task.dirty ? <span className="task-pending">{t("task.local")}</span> : null}
+      {completed || localPending ? (
+        <span className="task-badges">
+          {completed ? <span className="task-state">{t("task.done")}</span> : null}
+          {localPending ? <span className="task-pending">{t("task.pending")}</span> : null}
+        </span>
+      ) : null}
       <button className="task-more" title={t("task.details")} onClick={() => onOpenDetails(task)}>
         <MoreHorizontal size={16} />
       </button>
     </li>
   );
-}
-
-function isDueTodayOrEarlier(task: Task) {
-  if (!task.dueDateTime || task.status === "completed") return false;
-  return taskDateKey(task.dueDateTime, task.timeZone) <= todayKey();
-}
-
-function todayKey() {
-  const now = new Date();
-  const month = `${now.getMonth() + 1}`.padStart(2, "0");
-  const day = `${now.getDate()}`.padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
 }

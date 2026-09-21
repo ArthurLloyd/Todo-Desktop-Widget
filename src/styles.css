@@ -10,6 +10,12 @@
   --danger: #dc2626;
   --success: #16a34a;
   --completed: #64748b;
+  --task-overdue: var(--danger);
+  --task-due-today: var(--accent);
+  --task-important: #d97706;
+  --task-pending: var(--text-muted);
+  --task-completed: var(--completed);
+  --task-completed-accent: var(--success);
   --text: #1f2937;
   --text-muted: #6b7280;
   --surface: rgba(245, 247, 250, var(--widget-opacity, 0.78));
@@ -316,36 +322,28 @@ button {
   transform: translateY(-1px);
 }
 
-.task-item--overdue {
-  color: var(--danger);
-}
-
-.task-item--overdue .task-checkbox {
-  border-color: rgba(220, 38, 38, 0.72);
-}
-
 .task-item--completing {
   opacity: 0.42;
   transform: translateX(8px);
 }
 
 .task-item--completed {
-  color: var(--completed);
+  color: var(--task-completed);
   opacity: 0.74;
 }
 
 .task-item--completed .task-title {
   text-decoration: line-through;
   text-decoration-thickness: 1.5px;
-  text-decoration-color: rgba(100, 116, 139, 0.72);
+  text-decoration-color: color-mix(in srgb, var(--task-completed) 72%, transparent);
 }
 
 .task-item--completed .task-checkbox {
   display: grid;
   place-items: center;
   color: white;
-  background: var(--success);
-  border-color: var(--success);
+  background: var(--task-completed-accent);
+  border-color: var(--task-completed-accent);
 }
 
 .task-checkbox {
@@ -365,6 +363,14 @@ button {
   border-color: var(--accent);
   background: rgba(37, 99, 235, 0.08);
   transform: scale(1.05);
+}
+
+.task-item--overdue .task-checkbox {
+  border-color: color-mix(in srgb, var(--task-overdue) 58%, transparent);
+}
+
+.task-item--due-today .task-checkbox {
+  border-color: color-mix(in srgb, var(--task-due-today) 42%, transparent);
 }
 
 .task-title {
@@ -397,22 +403,39 @@ button {
 }
 
 .task-meta--overdue {
-  color: var(--danger);
+  color: var(--task-overdue);
   font-weight: 700;
+}
+
+.task-meta--due-today {
+  color: var(--task-due-today);
+  font-weight: 650;
+}
+
+.task-meta--important {
+  color: var(--task-important);
+  font-weight: 650;
+}
+
+.task-badges {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
 .task-pending {
   padding: 2px 6px;
-  color: var(--text-muted);
-  background: rgba(148, 163, 184, 0.14);
+  color: var(--task-pending);
+  background: color-mix(in srgb, var(--task-pending) 14%, transparent);
   border-radius: 999px;
   font-size: 11px;
 }
 
 .task-state {
   padding: 2px 6px;
-  color: var(--success);
-  background: rgba(22, 163, 74, 0.12);
+  color: var(--task-completed-accent);
+  background: color-mix(in srgb, var(--task-completed-accent) 12%, transparent);
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
