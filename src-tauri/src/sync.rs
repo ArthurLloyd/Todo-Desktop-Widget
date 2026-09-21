@@ -4,6 +4,10 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::{auth, db, graph, models::SyncStatusDto, widget_snapshot, AppState};
 
 pub async fn sync_now(state: &AppState) -> SyncStatusDto {
+    state.sync_coordinator.run_direct_global_sync(state).await
+}
+
+pub(crate) async fn execute_global_sync(state: &AppState) -> SyncStatusDto {
     let previous_last_synced = state
         .db
         .lock()
@@ -28,7 +32,7 @@ pub async fn sync_now(state: &AppState) -> SyncStatusDto {
     }
 }
 
-pub async fn sync_list_now(state: &AppState, list_id: &str) -> SyncStatusDto {
+pub(crate) async fn sync_list_now(state: &AppState, list_id: &str) -> SyncStatusDto {
     let previous_last_synced = state
         .db
         .lock()

@@ -9,10 +9,14 @@ mod hotkey;
 mod models;
 mod settings;
 mod sync;
+mod sync_coordinator;
 mod tray;
 mod widget_snapshot;
 
-use std::{collections::HashMap, sync::Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::Context;
 use models::SyncStatusDto;
@@ -27,10 +31,14 @@ pub struct AppState {
     pub client_id: Option<String>,
     pub tenant: String,
     pub macos_app_group_id: String,
+    pub sync_coordinator: Arc<sync_coordinator::SyncCoordinator>,
 }
 
 impl AppState {
-    fn new(app: &tauri::App) -> anyhow::Result<Self> {
+    fn new(
+        app: &tauri::App,
+        sync_coordinator: Arc<sync_coordinator::SyncCoordinator>,
+    ) -> anyhow::Result<Self> {
         let app_dir = app
             .path()
             .app_data_dir()
@@ -57,6 +65,7 @@ impl AppState {
             client_id: config::client_id(app),
             tenant: config::tenant(app),
             macos_app_group_id,
+            sync_coordinator,
         })
     }
 }
@@ -66,7 +75,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            let state = AppState::new(app)?;
+            let sync_coordinator = Arc::new(sync_coordinator::SyncCoordinator::new());
+            let state = AppState::new(app, Arc::clone(&sync_coordinator))?;
             let restore_pinned = {
                 let conn = state
                     .db
@@ -75,9 +85,12 @@ pub fn run() {
                 db::load_settings(&conn)?.always_on_top
             };
             app.manage(state);
+            app.manage(Arc::clone(&sync_coordinator));
             app.manage(desktop_window::DesktopWindowState::default());
             tray::init(app.handle())?;
             hotkey::init(app.handle())?;
+            sync_coordinator.start_worker(app.handle().clone());
+            sync_coordinator.request_global_sync(sync_coordinator::GlobalSyncReason::Startup);
             if restore_pinned {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {

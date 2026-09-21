@@ -8,7 +8,9 @@ use crate::{
         AuthStatusDto, LoginStartDto, SettingsDto, SettingsPatch, SyncStatusDto, TaskDto,
         TaskListDto, TaskPatchDto,
     },
-    settings, sync, widget_snapshot, AppState,
+    settings,
+    sync_coordinator::GlobalSyncReason,
+    widget_snapshot, AppState,
 };
 
 #[tauri::command]
@@ -96,6 +98,10 @@ pub fn add_task(
         .map_err(|_| "database lock poisoned".to_string())?;
     let task = db::insert_local_task(&conn, title.trim(), &role).map_err(to_string)?;
     let _ = widget_snapshot::export_today(&conn, &state.macos_app_group_id);
+    drop(conn);
+    state
+        .sync_coordinator
+        .request_global_sync(GlobalSyncReason::Mutation);
     Ok(task)
 }
 
@@ -111,6 +117,10 @@ pub fn add_task_to_list(
         .map_err(|_| "database lock poisoned".to_string())?;
     let task = db::insert_local_task_for_list(&conn, title.trim(), &list_id).map_err(to_string)?;
     let _ = widget_snapshot::export_today(&conn, &state.macos_app_group_id);
+    drop(conn);
+    state
+        .sync_coordinator
+        .request_global_sync(GlobalSyncReason::Mutation);
     Ok(task)
 }
 
@@ -122,6 +132,10 @@ pub fn complete_task(state: State<'_, AppState>, task_id: String) -> Result<(), 
         .map_err(|_| "database lock poisoned".to_string())?;
     db::complete_local_task(&conn, &task_id).map_err(to_string)?;
     let _ = widget_snapshot::export_today(&conn, &state.macos_app_group_id);
+    drop(conn);
+    state
+        .sync_coordinator
+        .request_global_sync(GlobalSyncReason::Mutation);
     Ok(())
 }
 
@@ -137,27 +151,16 @@ pub fn update_task(
         .map_err(|_| "database lock poisoned".to_string())?;
     let task = db::update_local_task(&conn, &task_id, &patch).map_err(to_string)?;
     let _ = widget_snapshot::export_today(&conn, &state.macos_app_group_id);
+    drop(conn);
+    state
+        .sync_coordinator
+        .request_global_sync(GlobalSyncReason::Mutation);
     Ok(task)
 }
 
 #[tauri::command]
 pub async fn sync_now(state: State<'_, AppState>) -> Result<SyncStatusDto, String> {
-    {
-        let mut status = state
-            .sync_status
-            .lock()
-            .map_err(|_| "sync status lock poisoned".to_string())?;
-        status.state = "syncing".to_string();
-        status.message = Some("Syncing".to_string());
-    }
-
-    let next = sync::sync_now(&state).await;
-    let mut status = state
-        .sync_status
-        .lock()
-        .map_err(|_| "sync status lock poisoned".to_string())?;
-    *status = next.clone();
-    Ok(next)
+    Ok(state.sync_coordinator.run_global_sync_now(&state).await)
 }
 
 #[tauri::command]
@@ -165,22 +168,10 @@ pub async fn sync_list_now(
     state: State<'_, AppState>,
     list_id: String,
 ) -> Result<SyncStatusDto, String> {
-    {
-        let mut status = state
-            .sync_status
-            .lock()
-            .map_err(|_| "sync status lock poisoned".to_string())?;
-        status.state = "syncing".to_string();
-        status.message = Some("Syncing current list".to_string());
-    }
-
-    let next = sync::sync_list_now(&state, &list_id).await;
-    let mut status = state
-        .sync_status
-        .lock()
-        .map_err(|_| "sync status lock poisoned".to_string())?;
-    *status = next.clone();
-    Ok(next)
+    Ok(state
+        .sync_coordinator
+        .run_list_sync_now(&state, &list_id)
+        .await)
 }
 
 #[tauri::command]
@@ -212,6 +203,7 @@ pub async fn login(app: AppHandle, state: State<'_, AppState>) -> Result<LoginSt
     let app_for_poll = app.clone();
     tauri::async_runtime::spawn(async move {
         let result = auth::complete_browser_login(http, tenant, client_id, session).await;
+        let login_succeeded = result.is_ok();
 
         if let Some(state) = app_for_poll.try_state::<AppState>() {
             if let Ok(mut status) = state.sync_status.lock() {
@@ -231,11 +223,10 @@ pub async fn login(app: AppHandle, state: State<'_, AppState>) -> Result<LoginSt
                 }
             }
 
-            if auth::has_refresh_token(&state) {
-                let next = sync::sync_now(&state).await;
-                if let Ok(mut status) = state.sync_status.lock() {
-                    *status = next;
-                }
+            if login_succeeded && auth::has_refresh_token(&state) {
+                state
+                    .sync_coordinator
+                    .request_global_sync(GlobalSyncReason::Login);
             }
         }
     });
@@ -318,6 +309,7 @@ pub fn update_settings(
     state: State<'_, AppState>,
     settings: SettingsPatch,
 ) -> Result<SettingsDto, String> {
+    let interval_changed = settings.sync_interval_minutes.is_some();
     let conn = state
         .db
         .lock()
@@ -326,6 +318,12 @@ pub fn update_settings(
     let next = settings::apply_patch(current, settings);
     db::save_settings(&conn, &next).map_err(to_string)?;
     debug_console::apply(next.debug_mode);
+    drop(conn);
+    if interval_changed {
+        state
+            .sync_coordinator
+            .notify_interval_changed(next.sync_interval_minutes);
+    }
     Ok(next)
 }
 

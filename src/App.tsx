@@ -125,14 +125,6 @@ function WidgetApp() {
   }, [refreshLocal]);
 
   useEffect(() => {
-    const interval = window.setInterval(
-      () => void handleSync(),
-      Math.max(1, settings.syncIntervalMinutes) * 60 * 1000,
-    );
-    return () => window.clearInterval(interval);
-  }, [settings.syncIntervalMinutes]);
-
-  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const quickAddShortcut = (event.ctrlKey && event.altKey) || (event.metaKey && event.altKey);
       if (quickAddShortcut && event.key.toLowerCase() === "t") {
@@ -181,9 +173,9 @@ function WidgetApp() {
   useEffect(() => {
     if (auth.loggedIn && loginNotice) {
       setLoginNotice(null);
-      void handleSync();
+      void refreshLocal();
     }
-  }, [auth.loggedIn, loginNotice]);
+  }, [auth.loggedIn, loginNotice, refreshLocal]);
 
   async function handleAdd(title: string, listRole: ListRole) {
     const currentListId = selectedListIdRef.current;
@@ -194,19 +186,6 @@ function WidgetApp() {
 
     if (task.listId === currentListId || listRole === "today") {
       setTasks((current) => [task, ...current]);
-    }
-    setSyncStatus((current) => ({ ...current, state: "syncing", message: "Uploading task" }));
-    try {
-      const syncTarget = currentListId || task.listId;
-      const nextStatus = syncTarget && !syncTarget.startsWith("local-")
-        ? await api.syncListNow(syncTarget)
-        : await api.syncNow();
-      setSyncStatus(nextStatus);
-    } catch (error) {
-      setSyncStatus({
-        state: "error",
-        message: error instanceof Error ? error.message : String(error),
-      });
     }
     await refreshLocal(currentListId);
   }
@@ -496,12 +475,6 @@ function TaskDetailsWindow({ taskId, windowLabel }: { taskId: string | null; win
     try {
       const updated = await api.updateTask(nextTaskId, patch);
       setTask(updated);
-      const syncTarget = updated.listId;
-      if (syncTarget && !syncTarget.startsWith("local-")) {
-        await api.syncListNow(syncTarget);
-      } else {
-        await api.syncNow();
-      }
       await load();
       await emit("task-updated", { taskId: nextTaskId });
     } catch (saveError) {
