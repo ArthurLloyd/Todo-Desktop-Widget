@@ -1,5 +1,6 @@
 import { Trash2 } from "lucide-react";
 import { useI18n } from "../lib/i18n";
+import type { ThemeCssVariables } from "../lib/themeRuntime";
 import type { Task, TaskList, WidgetPane } from "../lib/types";
 import { TaskInput } from "./TaskInput";
 import { TaskList as TaskListView } from "./TaskList";
@@ -11,6 +12,7 @@ type Props = {
   tasks: Task[];
   completingIds: Set<string>;
   canDelete: boolean;
+  themeStyle?: ThemeCssVariables;
   onSelectList: (paneId: string, listId: string) => void;
   onAdd: (pane: WidgetPane, title: string) => Promise<void>;
   onComplete: (taskId: string) => void;
@@ -25,6 +27,7 @@ export function WidgetPaneView({
   tasks,
   completingIds,
   canDelete,
+  themeStyle,
   onSelectList,
   onAdd,
   onComplete,
@@ -37,7 +40,13 @@ export function WidgetPaneView({
     (list ? displayListName(list, t) : listMissing ? t("pane.listUnavailable") : t("pane.selectList"));
 
   return (
-    <section className="widget-pane" data-pane-id={pane.id} aria-label={title}>
+    <section
+      className="widget-pane"
+      data-pane-id={pane.id}
+      data-theme-override={themeStyle ? "true" : undefined}
+      style={themeStyle}
+      aria-label={title}
+    >
       <header className="widget-pane__header">
         <strong className="widget-pane__title">{title}</strong>
         <select

@@ -678,6 +678,50 @@ pub fn update_current_widget_name(
 }
 
 #[tauri::command]
+pub fn set_current_widget_theme(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    theme_id: Option<String>,
+) -> Result<WidgetInstanceDto, String> {
+    let context = widget_window::resolve_widget_context(&window, &state)?;
+    let instance = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::set_widget_default_theme(&conn, &context.instance.id, theme_id.as_deref())
+            .map_err(to_string)?
+    };
+    widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
+    Ok(instance)
+}
+
+#[tauri::command]
+pub fn set_current_widget_pane_theme(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    pane_id: String,
+    theme_id: Option<String>,
+) -> Result<WidgetPaneDto, String> {
+    let context = widget_window::resolve_widget_context(&window, &state)?;
+    let pane = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::set_widget_pane_theme_for_widget(
+            &conn,
+            &context.instance.id,
+            &pane_id,
+            theme_id.as_deref(),
+        )
+        .map_err(to_string)?
+    };
+    widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
+    Ok(pane)
+}
+
+#[tauri::command]
 pub async fn create_widget_window(
     app: AppHandle,
     window: WebviewWindow,

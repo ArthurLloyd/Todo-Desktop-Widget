@@ -1,13 +1,15 @@
 import type { CSSProperties, ReactNode } from "react";
+import type { ThemeCssVariables } from "../lib/themeRuntime";
 
 type Props = {
   opacity: number;
   fontFamily: string;
   fontScale: number;
+  themeStyle?: ThemeCssVariables;
   children: ReactNode;
 };
 
-export function WidgetShell({ opacity, fontFamily, fontScale, children }: Props) {
+export function WidgetShell({ opacity, fontFamily, fontScale, themeStyle, children }: Props) {
   return (
     <main
       className="widget-shell"
@@ -16,6 +18,7 @@ export function WidgetShell({ opacity, fontFamily, fontScale, children }: Props)
         {
           "--widget-opacity": opacity,
           "--font-scale": fontScale,
+          ...themeStyle,
         } as CSSProperties
       }
     >

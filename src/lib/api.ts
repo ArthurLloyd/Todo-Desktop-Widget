@@ -240,6 +240,10 @@ export const api = {
     call<WidgetInstance>("update_current_widget_layout", { layoutMode }),
   updateCurrentWidgetName: (name: string) =>
     call<WidgetInstance>("update_current_widget_name", { name }),
+  setCurrentWidgetTheme: (themeId?: string | null) =>
+    call<WidgetInstance>("set_current_widget_theme", { themeId: themeId ?? null }),
+  setCurrentWidgetPaneTheme: (paneId: string, themeId?: string | null) =>
+    call<WidgetPane>("set_current_widget_pane_theme", { paneId, themeId: themeId ?? null }),
   createWidgetWindow: (initialListId?: string | null) =>
     call<WidgetInstance>("create_widget_window", { initialListId: initialListId ?? null }),
   openWidgetWindow: (instanceId: string) =>

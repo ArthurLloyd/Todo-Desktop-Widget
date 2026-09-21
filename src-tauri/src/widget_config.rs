@@ -9,6 +9,9 @@ use crate::models::{
 };
 
 pub const DEFAULT_THEME_ID: &str = "default";
+pub const OCEAN_THEME_ID: &str = "ocean";
+pub const VIOLET_THEME_ID: &str = "violet";
+pub const FOREST_THEME_ID: &str = "forest";
 pub const DEFAULT_WIDGET_ID: &str = "main";
 pub const DEFAULT_PANE_ID: &str = "main-pane";
 
@@ -83,16 +86,18 @@ pub fn bootstrap_defaults(conn: &Connection) -> anyhow::Result<()> {
     let transaction = conn.unchecked_transaction()?;
     let now = Utc::now().to_rfc3339();
 
-    let theme_created = transaction.execute(
-        "INSERT OR IGNORE INTO widget_themes
-         (id, name, config_json, is_builtin, created_at, updated_at)
-         VALUES (?1, 'Default', ?2, 1, ?3, ?3)",
-        params![
-            DEFAULT_THEME_ID,
-            serde_json::to_string(&default_theme_config())?,
-            now
-        ],
-    )? > 0;
+    let mut created_themes = Vec::new();
+    for (id, name, config) in builtin_theme_definitions() {
+        if transaction.execute(
+            "INSERT OR IGNORE INTO widget_themes
+             (id, name, config_json, is_builtin, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 1, ?4, ?4)",
+            params![id, name, serde_json::to_string(&config)?, now],
+        )? > 0
+        {
+            created_themes.push(name);
+        }
+    }
 
     let instance_count: i64 =
         transaction.query_row("SELECT COUNT(*) FROM widget_instances", [], |row| {
@@ -139,8 +144,8 @@ pub fn bootstrap_defaults(conn: &Connection) -> anyhow::Result<()> {
     ensure_primary_and_migrate_legacy_pinned(&transaction)?;
     transaction.commit()?;
 
-    if theme_created {
-        println!("[widget-config] initialized default theme");
+    for theme_name in created_themes {
+        println!("[widget-config] initialized built-in theme: {theme_name}");
     }
     if widget_created {
         println!("[widget-config] initialized default widget");
@@ -167,6 +172,69 @@ pub fn default_theme_config() -> WidgetThemeConfig {
         blur_px: 24.0,
         border_radius_px: 18.0,
     }
+}
+
+fn builtin_theme_definitions() -> [(&'static str, &'static str, WidgetThemeConfig); 4] {
+    [
+        (DEFAULT_THEME_ID, "Default", default_theme_config()),
+        (
+            OCEAN_THEME_ID,
+            "Ocean",
+            WidgetThemeConfig {
+                version: 1,
+                background: "#102A3A".to_string(),
+                foreground: "#EAF8FF".to_string(),
+                secondary_text: "#A5C4D4".to_string(),
+                accent: "#38BDF8".to_string(),
+                task_overdue: "#FB7185".to_string(),
+                task_due_today: "#38BDF8".to_string(),
+                task_important: "#FBBF24".to_string(),
+                task_pending: "#94A3B8".to_string(),
+                task_completed: "#7FA7B8".to_string(),
+                background_opacity: 0.88,
+                blur_px: 20.0,
+                border_radius_px: 16.0,
+            },
+        ),
+        (
+            VIOLET_THEME_ID,
+            "Violet",
+            WidgetThemeConfig {
+                version: 1,
+                background: "#281E38".to_string(),
+                foreground: "#F7F2FF".to_string(),
+                secondary_text: "#C0B3D4".to_string(),
+                accent: "#A78BFA".to_string(),
+                task_overdue: "#FB7185".to_string(),
+                task_due_today: "#C4B5FD".to_string(),
+                task_important: "#FBBF24".to_string(),
+                task_pending: "#A9A0B8".to_string(),
+                task_completed: "#A495B8".to_string(),
+                background_opacity: 0.88,
+                blur_px: 8.0,
+                border_radius_px: 32.0,
+            },
+        ),
+        (
+            FOREST_THEME_ID,
+            "Forest",
+            WidgetThemeConfig {
+                version: 1,
+                background: "#153028".to_string(),
+                foreground: "#ECFDF5".to_string(),
+                secondary_text: "#A7CDBE".to_string(),
+                accent: "#34D399".to_string(),
+                task_overdue: "#FB7185".to_string(),
+                task_due_today: "#5EEAD4".to_string(),
+                task_important: "#FBBF24".to_string(),
+                task_pending: "#94B8AA".to_string(),
+                task_completed: "#86AA9C".to_string(),
+                background_opacity: 0.88,
+                blur_px: 0.0,
+                border_radius_px: 8.0,
+            },
+        ),
+    ]
 }
 
 pub fn validate_theme_config(config: &WidgetThemeConfig) -> anyhow::Result<()> {
@@ -475,6 +543,37 @@ pub fn set_widget_name(
         bail!("widget instance not found");
     }
     get_widget_instance(conn, widget_instance_id)
+}
+
+pub fn set_widget_default_theme(
+    conn: &Connection,
+    widget_instance_id: &str,
+    theme_id: Option<&str>,
+) -> anyhow::Result<WidgetInstanceDto> {
+    ensure_theme_exists(conn, theme_id)?;
+    if conn.execute(
+        "UPDATE widget_instances SET default_theme_id = ?2, updated_at = ?3 WHERE id = ?1",
+        params![widget_instance_id, theme_id, Utc::now().to_rfc3339()],
+    )? == 0
+    {
+        bail!("widget instance not found");
+    }
+    get_widget_instance(conn, widget_instance_id)
+}
+
+pub fn set_widget_pane_theme_for_widget(
+    conn: &Connection,
+    widget_instance_id: &str,
+    pane_id: &str,
+    theme_id: Option<&str>,
+) -> anyhow::Result<WidgetPaneDto> {
+    ensure_pane_belongs_to_widget(conn, pane_id, widget_instance_id)?;
+    ensure_theme_exists(conn, theme_id)?;
+    conn.execute(
+        "UPDATE widget_panes SET theme_id = ?2, updated_at = ?3 WHERE id = ?1",
+        params![pane_id, theme_id, Utc::now().to_rfc3339()],
+    )?;
+    get_widget_pane(conn, pane_id)
 }
 
 #[cfg(test)]
@@ -1076,7 +1175,21 @@ mod tests {
         let conn = test_db();
         bootstrap_defaults(&conn).expect("bootstrap defaults");
 
-        assert_eq!(list_widget_themes(&conn).expect("list themes").len(), 1);
+        let themes = list_widget_themes(&conn).expect("list themes");
+        assert_eq!(themes.len(), 4);
+        assert_eq!(
+            themes
+                .iter()
+                .map(|theme| theme.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                DEFAULT_THEME_ID,
+                FOREST_THEME_ID,
+                OCEAN_THEME_ID,
+                VIOLET_THEME_ID
+            ]
+        );
+        assert!(themes.iter().all(|theme| theme.is_builtin));
         assert_eq!(list_widget_instances(&conn).expect("list widgets").len(), 1);
         assert_eq!(
             list_widget_panes(&conn, DEFAULT_WIDGET_ID)
@@ -1092,7 +1205,7 @@ mod tests {
         bootstrap_defaults(&conn).expect("first bootstrap");
         bootstrap_defaults(&conn).expect("second bootstrap");
 
-        assert_eq!(list_widget_themes(&conn).expect("list themes").len(), 1);
+        assert_eq!(list_widget_themes(&conn).expect("list themes").len(), 4);
         assert_eq!(list_widget_instances(&conn).expect("list widgets").len(), 1);
         assert_eq!(
             list_widget_panes(&conn, DEFAULT_WIDGET_ID)
@@ -1269,6 +1382,102 @@ mod tests {
                 .id,
             custom.id
         );
+    }
+
+    #[test]
+    fn widget_theme_assignment_is_isolated() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        let second = create_widget_with_default_pane(&conn, None).expect("create second widget");
+
+        set_widget_default_theme(&conn, DEFAULT_WIDGET_ID, Some(OCEAN_THEME_ID))
+            .expect("set main ocean theme");
+        set_widget_default_theme(&conn, &second.id, Some(FOREST_THEME_ID))
+            .expect("set second forest theme");
+        set_widget_default_theme(&conn, DEFAULT_WIDGET_ID, Some(VIOLET_THEME_ID))
+            .expect("change main violet theme");
+
+        assert_eq!(
+            get_widget_instance(&conn, DEFAULT_WIDGET_ID)
+                .unwrap()
+                .default_theme_id
+                .as_deref(),
+            Some(VIOLET_THEME_ID)
+        );
+        assert_eq!(
+            get_widget_instance(&conn, &second.id)
+                .unwrap()
+                .default_theme_id
+                .as_deref(),
+            Some(FOREST_THEME_ID)
+        );
+    }
+
+    #[test]
+    fn pane_theme_assignment_is_isolated_and_preserves_other_fields() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        set_widget_pane_list_for_widget(
+            &conn,
+            DEFAULT_WIDGET_ID,
+            DEFAULT_PANE_ID,
+            Some("local-inbox"),
+        )
+        .expect("bind main pane");
+        let second = create_pane_for_widget(&conn, DEFAULT_WIDGET_ID, Some("local-today"))
+            .expect("create second pane");
+
+        set_widget_pane_theme_for_widget(
+            &conn,
+            DEFAULT_WIDGET_ID,
+            DEFAULT_PANE_ID,
+            Some(OCEAN_THEME_ID),
+        )
+        .expect("set first pane ocean");
+        set_widget_pane_theme_for_widget(
+            &conn,
+            DEFAULT_WIDGET_ID,
+            &second.id,
+            Some(VIOLET_THEME_ID),
+        )
+        .expect("set second pane violet");
+        set_widget_pane_theme_for_widget(
+            &conn,
+            DEFAULT_WIDGET_ID,
+            DEFAULT_PANE_ID,
+            Some(FOREST_THEME_ID),
+        )
+        .expect("change first pane forest");
+
+        let first = get_widget_pane(&conn, DEFAULT_PANE_ID).unwrap();
+        let unchanged_second = get_widget_pane(&conn, &second.id).unwrap();
+        assert_eq!(first.theme_id.as_deref(), Some(FOREST_THEME_ID));
+        assert_eq!(first.list_id.as_deref(), Some("local-inbox"));
+        assert_eq!(first.sort_order, 0);
+        assert_eq!(unchanged_second.theme_id.as_deref(), Some(VIOLET_THEME_ID));
+        assert_eq!(unchanged_second.list_id.as_deref(), Some("local-today"));
+    }
+
+    #[test]
+    fn pane_theme_assignment_rejects_another_widget() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).expect("bootstrap defaults");
+        let second = create_widget_with_default_pane(&conn, None).expect("create second widget");
+        let second_pane = list_widget_panes(&conn, &second.id).unwrap()[0].clone();
+
+        let error = set_widget_pane_theme_for_widget(
+            &conn,
+            DEFAULT_WIDGET_ID,
+            &second_pane.id,
+            Some(OCEAN_THEME_ID),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("current widget"));
+        assert!(get_widget_pane(&conn, &second_pane.id)
+            .unwrap()
+            .theme_id
+            .is_none());
     }
 
     #[test]

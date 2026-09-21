@@ -16,6 +16,7 @@ import type {
   WidgetInstance,
   WidgetLayoutMode,
   WidgetPane,
+  WidgetTheme,
 } from "./lib/types";
 import { WidgetShell } from "./components/WidgetShell";
 import { TitleBar } from "./components/TitleBar";
@@ -28,6 +29,12 @@ import { PaneLayout } from "./components/PaneLayout";
 import { WidgetPaneView } from "./components/WidgetPaneView";
 import { compareTaskDueDates } from "./lib/dates";
 import { I18nProvider, useI18n } from "./lib/i18n";
+import {
+  createThemeMap,
+  resolvePaneThemeOverride,
+  resolveWidgetTheme,
+  themeToCssVariables,
+} from "./lib/themeRuntime";
 
 const defaultStatus: SyncStatus = { state: "idle" };
 const defaultSettings: Settings = {
@@ -75,6 +82,7 @@ function WidgetApp() {
   const [auth, setAuth] = useState<AuthStatus>({ loggedIn: false });
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [widgetContext, setWidgetContext] = useState<WidgetContext | null>(null);
+  const [widgetThemes, setWidgetThemes] = useState<WidgetTheme[]>([]);
   const widgetInstanceIdRef = useRef<string | null>(null);
   const [widgetInstances, setWidgetInstances] = useState<WidgetInstance[]>([]);
   const [widgetConfigError, setWidgetConfigError] = useState<string | null>(null);
@@ -90,6 +98,15 @@ function WidgetApp() {
   const [completingIds, setCompletingIds] = useState<Set<string>>(() => new Set());
 
   const sortedTasks = useMemo(() => sortTasks(tasks, sortMode), [sortMode, tasks]);
+  const themeMap = useMemo(() => createThemeMap(widgetThemes), [widgetThemes]);
+  const widgetTheme = useMemo(
+    () => resolveWidgetTheme(themeMap, widgetContext?.instance.defaultThemeId),
+    [themeMap, widgetContext?.instance.defaultThemeId],
+  );
+  const widgetThemeStyle = useMemo(
+    () => widgetTheme ? themeToCssVariables(widgetTheme.config, settings.opacity) : undefined,
+    [settings.opacity, widgetTheme],
+  );
 
   const refreshTaskData = useCallback(async () => {
     const [snapshot, nextStatus, nextAuth, nextSettings] = await Promise.all([
@@ -107,9 +124,13 @@ function WidgetApp() {
   }, []);
 
   const reloadWidgetContext = useCallback(async () => {
-    const nextContext = await api.getCurrentWidgetContext();
+    const [nextContext, nextThemes] = await Promise.all([
+      api.getCurrentWidgetContext(),
+      api.listWidgetThemes(),
+    ]);
     widgetInstanceIdRef.current = nextContext.instance.id;
     setWidgetContext(nextContext);
+    setWidgetThemes(nextThemes);
   }, []);
 
   const reloadWidgetInstances = useCallback(async () => {
@@ -340,13 +361,38 @@ function WidgetApp() {
     }
   }
 
+  async function handleWidgetThemeChange(themeId: string) {
+    setWidgetConfigError(null);
+    try {
+      await api.setCurrentWidgetTheme(themeId);
+      await reloadWidgetContext();
+    } catch (error) {
+      setWidgetConfigError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handlePaneThemeChange(paneId: string, themeId: string | null) {
+    setWidgetConfigError(null);
+    try {
+      await api.setCurrentWidgetPaneTheme(paneId, themeId);
+      await reloadWidgetContext();
+    } catch (error) {
+      setWidgetConfigError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function hideWindow() {
     await api.setWindowMode("hidden");
   }
 
   return (
     <I18nProvider language={settings.language}>
-      <WidgetShell opacity={settings.opacity} fontFamily={settings.fontFamily} fontScale={settings.fontScale}>
+      <WidgetShell
+        opacity={settings.opacity}
+        fontFamily={settings.fontFamily}
+        fontScale={settings.fontScale}
+        themeStyle={widgetThemeStyle}
+      >
         <TitleBar
           isPinned={widgetContext?.instance.pinned || false}
           widgetName={widgetContext?.instance.name || "Todo"}
@@ -373,6 +419,10 @@ function WidgetApp() {
                 .filter((task) => task.listId === pane.listId)
                 .filter((task) => showCompleted || task.status !== "completed")
                 .slice(0, pane.maxTasks ?? undefined);
+              const paneTheme = resolvePaneThemeOverride(themeMap, pane.themeId);
+              const paneThemeStyle = paneTheme
+                ? themeToCssVariables(paneTheme.config, settings.opacity)
+                : undefined;
               return (
                 <WidgetPaneView
                   key={pane.id}
@@ -382,6 +432,7 @@ function WidgetApp() {
                   tasks={paneTasks}
                   completingIds={completingIds}
                   canDelete={widgetContext.panes.length > 1}
+                  themeStyle={paneThemeStyle}
                   onSelectList={(paneId, listId) => void handleSelectPaneList(paneId, listId)}
                   onAdd={handlePaneAdd}
                   onComplete={handleComplete}
@@ -411,11 +462,14 @@ function WidgetApp() {
         onCloseWidget={widgetContext?.instance.isPrimary ? undefined : () => void api.closeCurrentWidgetWindow()}
         currentWidget={widgetContext}
         taskLists={taskLists}
+        widgetThemes={widgetThemes}
         configError={widgetConfigError}
         onRenameWidget={(name) => void handleWidgetRename(name)}
         onChangeLayout={(layoutMode) => void handleLayoutChange(layoutMode)}
+        onChangeWidgetTheme={(themeId) => void handleWidgetThemeChange(themeId)}
         onAddPane={() => void handleAddPane()}
         onSelectPaneList={(paneId, listId) => void handleSelectPaneList(paneId, listId)}
+        onChangePaneTheme={(paneId, themeId) => void handlePaneThemeChange(paneId, themeId)}
         onDeletePane={(paneId) => void handleDeletePane(paneId)}
       />
 

@@ -18,7 +18,10 @@
   --task-completed-accent: var(--success);
   --text: #1f2937;
   --text-muted: #6b7280;
-  --surface: rgba(245, 247, 250, var(--widget-opacity, 0.78));
+  --widget-background: rgba(245, 247, 250, var(--widget-opacity, 0.78));
+  --widget-blur: 24px;
+  --widget-border-radius: 18px;
+  --surface: var(--widget-background);
   --surface-strong: rgba(255, 255, 255, 0.62);
   --border: rgba(255, 255, 255, 0.55);
   --shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
@@ -28,7 +31,7 @@
   :root {
     --text: #f9fafb;
     --text-muted: #9ca3af;
-    --surface: rgba(17, 24, 39, var(--widget-opacity, 0.78));
+    --widget-background: rgba(17, 24, 39, var(--widget-opacity, 0.78));
     --surface-strong: rgba(31, 41, 55, 0.68);
     --border: rgba(255, 255, 255, 0.1);
     --shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
@@ -72,11 +75,12 @@ button {
   color: var(--text);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.08)),
-    var(--surface);
+    var(--widget-background);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--widget-border-radius);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(24px) saturate(1.25);
+  -webkit-backdrop-filter: blur(var(--widget-blur)) saturate(1.25);
+  backdrop-filter: blur(var(--widget-blur)) saturate(1.25);
   font-size: calc(14px * var(--font-scale, 1));
 }
 
@@ -153,8 +157,8 @@ button {
 }
 
 .list-select:focus {
-  border-color: rgba(37, 99, 235, 0.55);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .titlebar__actions {
@@ -301,6 +305,17 @@ button {
   overflow: hidden;
 }
 
+.widget-pane[data-theme-override="true"] {
+  color: var(--text);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent),
+    var(--widget-background);
+  border-color: var(--border);
+  border-radius: var(--widget-border-radius);
+  -webkit-backdrop-filter: blur(var(--widget-blur)) saturate(1.2);
+  backdrop-filter: blur(var(--widget-blur)) saturate(1.2);
+}
+
 .widget-pane__header {
   display: grid;
   grid-template-columns: minmax(72px, auto) minmax(92px, 1fr) 30px;
@@ -372,8 +387,8 @@ button {
 }
 
 .task-input:focus-within {
-  border-color: rgba(37, 99, 235, 0.55);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .task-input input,
@@ -472,7 +487,7 @@ button {
 
 .task-checkbox:hover {
   border-color: var(--accent);
-  background: rgba(37, 99, 235, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   transform: scale(1.05);
 }
 
@@ -622,9 +637,10 @@ button {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.06)),
     var(--surface);
-  border-radius: 18px;
+  border-radius: var(--widget-border-radius);
   overflow: auto;
-  backdrop-filter: blur(24px) saturate(1.25);
+  -webkit-backdrop-filter: blur(var(--widget-blur)) saturate(1.25);
+  backdrop-filter: blur(var(--widget-blur)) saturate(1.25);
   animation: panel-in 180ms ease both;
 }
 
@@ -652,7 +668,7 @@ button {
 .settings-panel::-webkit-scrollbar-thumb:hover,
 .details-panel::-webkit-scrollbar-thumb:hover,
 .task-list::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(37, 99, 235, 0.46);
+  background-color: color-mix(in srgb, var(--accent) 46%, transparent);
 }
 
 .context-menu-backdrop {
@@ -699,7 +715,7 @@ button {
 
 .context-menu button:hover {
   color: var(--accent);
-  background: rgba(37, 99, 235, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   transform: translateX(2px);
 }
 
@@ -961,8 +977,8 @@ button {
 .details-field input:focus,
 .details-field select:focus,
 .details-field textarea:focus {
-  border-color: rgba(37, 99, 235, 0.55);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
   background: rgba(255, 255, 255, 0.78);
   transform: translateY(-1px);
 }
@@ -990,7 +1006,7 @@ button {
 }
 
 .text-button:hover:not(:disabled) {
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.22);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .details-field option {
@@ -1079,7 +1095,11 @@ button {
 
 .settings-row input[type="range"]::-webkit-slider-runnable-track {
   height: 6px;
-  background: linear-gradient(90deg, rgba(37, 99, 235, 0.75), rgba(20, 184, 166, 0.56));
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 75%, transparent),
+    color-mix(in srgb, var(--task-due-today) 56%, transparent)
+  );
   border-radius: 999px;
 }
 
@@ -1099,7 +1119,9 @@ button {
 }
 
 .settings-row input[type="range"]:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18), 0 4px 12px rgba(15, 23, 42, 0.22);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 4px 12px rgba(15, 23, 42, 0.22);
 }
 
 .text-button,
@@ -1185,7 +1207,7 @@ button {
 
 .pane-manager__item {
   display: grid;
-  grid-template-columns: minmax(70px, 1fr) minmax(100px, 1.2fr) 30px;
+  grid-template-columns: minmax(0, 1fr) 30px;
   align-items: center;
   gap: 7px;
   min-height: 34px;
@@ -1200,6 +1222,7 @@ button {
 }
 
 .pane-manager__item select {
+  grid-column: 1 / -1;
   min-width: 0;
   height: 30px;
 }

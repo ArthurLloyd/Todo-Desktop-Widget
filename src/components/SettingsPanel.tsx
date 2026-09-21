@@ -1,6 +1,14 @@
 import { ExternalLink, LogIn, LogOut, Plus, RotateCcw, Trash2, UserCircle, X } from "lucide-react";
 import { localizeBackendMessage, useI18n } from "../lib/i18n";
-import type { AuthStatus, Settings, TaskList, WidgetContext, WidgetInstance, WidgetLayoutMode } from "../lib/types";
+import type {
+  AuthStatus,
+  Settings,
+  TaskList,
+  WidgetContext,
+  WidgetInstance,
+  WidgetLayoutMode,
+  WidgetTheme,
+} from "../lib/types";
 
 type Props = {
   open: boolean;
@@ -19,11 +27,14 @@ type Props = {
   onCloseWidget?: () => void;
   currentWidget: WidgetContext | null;
   taskLists: TaskList[];
+  widgetThemes: WidgetTheme[];
   configError?: string | null;
   onRenameWidget: (name: string) => void;
   onChangeLayout: (layoutMode: WidgetLayoutMode) => void;
+  onChangeWidgetTheme: (themeId: string) => void;
   onAddPane: () => void;
   onSelectPaneList: (paneId: string, listId: string) => void;
+  onChangePaneTheme: (paneId: string, themeId: string | null) => void;
   onDeletePane: (paneId: string) => void;
 };
 
@@ -44,11 +55,14 @@ export function SettingsPanel({
   onCloseWidget,
   currentWidget,
   taskLists,
+  widgetThemes,
   configError,
   onRenameWidget,
   onChangeLayout,
+  onChangeWidgetTheme,
   onAddPane,
   onSelectPaneList,
+  onChangePaneTheme,
   onDeletePane,
 }: Props) {
   const { t } = useI18n();
@@ -232,6 +246,28 @@ export function SettingsPanel({
               <option value="grid">{t("pane.layoutGrid")}</option>
             </select>
           </label>
+          <label className="settings-row">
+            <span>{t("theme.windowTheme")}</span>
+            <select
+              value={
+                widgetThemes.some(
+                  (theme) => theme.id === (currentWidget.instance.defaultThemeId || "default"),
+                )
+                  ? currentWidget.instance.defaultThemeId || "default"
+                  : "__missing__"
+              }
+              onChange={(event) => onChangeWidgetTheme(event.target.value)}
+            >
+              {!widgetThemes.some(
+                (theme) => theme.id === (currentWidget.instance.defaultThemeId || "default"),
+              ) && (
+                <option value="__missing__" disabled>{t("theme.unavailable")}</option>
+              )}
+              {widgetThemes.map((theme) => (
+                <option key={theme.id} value={theme.id}>{displayThemeName(theme, t)}</option>
+              ))}
+            </select>
+          </label>
           {currentWidget.instance.layoutMode === "single" && currentWidget.panes.length > 1 && (
             <span className="settings-hint">{t("pane.singleHint")}</span>
           )}
@@ -264,6 +300,23 @@ export function SettingsPanel({
                       <option key={item.id} value={item.id}>{item.displayName}</option>
                     ))}
                   </select>
+                  <select
+                    aria-label={t("theme.paneThemeNamed", { name })}
+                    value={
+                      !pane.themeId || widgetThemes.some((theme) => theme.id === pane.themeId)
+                        ? pane.themeId || ""
+                        : "__missing__"
+                    }
+                    onChange={(event) => onChangePaneTheme(pane.id, event.target.value || null)}
+                  >
+                    <option value="">{t("theme.inheritWindow")}</option>
+                    {pane.themeId && !widgetThemes.some((theme) => theme.id === pane.themeId) && (
+                      <option value="__missing__" disabled>{t("theme.unavailable")}</option>
+                    )}
+                    {widgetThemes.map((theme) => (
+                      <option key={theme.id} value={theme.id}>{displayThemeName(theme, t)}</option>
+                    ))}
+                  </select>
                   <button
                     className="icon-button icon-button--danger"
                     type="button"
@@ -290,4 +343,12 @@ export function SettingsPanel({
       </button>
     </aside>
   );
+}
+
+function displayThemeName(theme: WidgetTheme, t: ReturnType<typeof useI18n>["t"]) {
+  if (theme.id === "default") return t("theme.default");
+  if (theme.id === "ocean") return t("theme.ocean");
+  if (theme.id === "violet") return t("theme.violet");
+  if (theme.id === "forest") return t("theme.forest");
+  return theme.name;
 }

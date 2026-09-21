@@ -168,6 +168,8 @@ pub fn run() {
             commands::delete_current_widget_pane,
             commands::update_current_widget_layout,
             commands::update_current_widget_name,
+            commands::set_current_widget_theme,
+            commands::set_current_widget_pane_theme,
             commands::create_widget_window,
             commands::open_widget_window,
             commands::close_current_widget_window,
