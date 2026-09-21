@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, ExternalLink, Palette, Plus, Save, Trash2, X } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Palette, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useI18n } from "../lib/i18n";
 import type {
@@ -30,6 +30,7 @@ type Props = {
   onUpdatePane: (pane: WidgetPane, input: WidgetPaneInput) => void;
   onDeletePane: (pane: WidgetPane) => void;
   onMovePane: (pane: WidgetPane, direction: -1 | 1) => void;
+  onResetPaneSizes: () => void;
   onManageThemes: () => void;
 };
 
@@ -51,6 +52,7 @@ export function WidgetManagerDetail({
   onUpdatePane,
   onDeletePane,
   onMovePane,
+  onResetPaneSizes,
   onManageThemes,
 }: Props) {
   const { t } = useI18n();
@@ -188,6 +190,12 @@ export function WidgetManagerDetail({
 
       <div className="widget-manager-detail__pane-heading">
         <strong>{t("pane.sections")}</strong>
+        {panes.length >= 2 ? (
+          <button className="text-button" type="button" disabled={busy} onClick={onResetPaneSizes}>
+            <RotateCcw size={14} />
+            {t("widgetManager.resetPaneSizes")}
+          </button>
+        ) : null}
         <button className="text-button" type="button" disabled={busy} onClick={onAddPane}>
           <Plus size={15} />
           {t("pane.add")}

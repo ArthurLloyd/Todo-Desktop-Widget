@@ -138,6 +138,7 @@ export type WidgetPane = {
   sortOrder: number;
   showCompleted?: boolean | null;
   maxTasks?: number | null;
+  sizeWeight: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -150,6 +151,12 @@ export type WidgetPaneInput = {
   sortOrder: number;
   showCompleted?: boolean | null;
   maxTasks?: number | null;
+  sizeWeight: number;
+};
+
+export type WidgetPaneWeightInput = {
+  paneId: string;
+  sizeWeight: number;
 };
 
 export type WidgetTheme = {

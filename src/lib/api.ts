@@ -14,6 +14,7 @@ import type {
   WidgetLayoutMode,
   WidgetPane,
   WidgetPaneInput,
+  WidgetPaneWeightInput,
   WidgetTaskSnapshot,
   WidgetTheme,
   WidgetThemeInput,
@@ -225,6 +226,8 @@ export const api = {
     call<void>("delete_managed_widget_pane", { instanceId, paneId }),
   reorderManagedWidgetPanes: (instanceId: string, orderedPaneIds: string[]) =>
     call<WidgetPane[]>("reorder_managed_widget_panes", { instanceId, orderedPaneIds }),
+  resetManagedWidgetPaneWeights: (instanceId: string) =>
+    call<WidgetPane[]>("reset_managed_widget_pane_weights", { instanceId }),
   createWidgetInstance: (input: WidgetInstanceInput) =>
     call<WidgetInstance>("create_widget_instance", { input }),
   updateWidgetInstance: (id: string, input: WidgetInstanceInput) =>
@@ -249,6 +252,8 @@ export const api = {
     call<WidgetPane>("set_current_widget_pane_list", { paneId, listId: listId ?? null }),
   deleteCurrentWidgetPane: (paneId: string) =>
     call<void>("delete_current_widget_pane", { paneId }),
+  setCurrentWidgetPaneWeights: (weights: WidgetPaneWeightInput[]) =>
+    call<WidgetPane[]>("set_current_widget_pane_weights", { weights }),
   updateCurrentWidgetLayout: (layoutMode: WidgetLayoutMode) =>
     call<WidgetInstance>("update_current_widget_layout", { layoutMode }),
   updateCurrentWidgetName: (name: string) =>

@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::models::{
     WidgetInstanceDto, WidgetInstanceInput, WidgetLayoutMode, WidgetPaneDto, WidgetPaneInput,
-    WidgetThemeConfig, WidgetThemeDto, WidgetThemeInput,
+    WidgetPaneWeightInput, WidgetThemeConfig, WidgetThemeDto, WidgetThemeInput,
 };
 
 pub const DEFAULT_THEME_ID: &str = "default";
@@ -55,6 +55,7 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
           sort_order INTEGER NOT NULL CHECK (sort_order >= 0),
           show_completed INTEGER NULL,
           max_tasks INTEGER NULL CHECK (max_tasks IS NULL OR max_tasks > 0),
+          size_weight REAL NOT NULL DEFAULT 1.0 CHECK (size_weight >= 0.05 AND size_weight <= 100.0),
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
@@ -75,6 +76,11 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
     ] {
         ensure_widget_instance_column(conn, name, definition)?;
     }
+    ensure_widget_pane_column(
+        conn,
+        "size_weight",
+        "REAL NOT NULL DEFAULT 1.0 CHECK (size_weight >= 0.05 AND size_weight <= 100.0)",
+    )?;
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_widget_instances_one_primary
          ON widget_instances(is_primary) WHERE is_primary = 1",
@@ -395,8 +401,8 @@ pub fn duplicate_widget_instance(
         transaction.execute(
             "INSERT INTO widget_panes
              (id, widget_instance_id, list_id, title_override, theme_id, sort_order,
-              show_completed, max_tasks, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)",
+              show_completed, max_tasks, size_weight, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
             params![
                 Uuid::new_v4().to_string(),
                 id,
@@ -406,6 +412,7 @@ pub fn duplicate_widget_instance(
                 pane.sort_order,
                 pane.show_completed.map(i64::from),
                 pane.max_tasks,
+                pane.size_weight,
                 now
             ],
         )?;
@@ -521,6 +528,7 @@ pub fn create_pane_for_widget(
             sort_order: next_sort_order,
             show_completed: None,
             max_tasks: None,
+            size_weight: 1.0,
         },
     )?;
     transaction.commit()?;
@@ -597,6 +605,56 @@ pub fn reorder_widget_panes(
             params![pane_id, sort_order as i64, now, widget_instance_id],
         )?;
     }
+    transaction.commit()?;
+    list_widget_panes(conn, widget_instance_id)
+}
+
+pub fn set_widget_pane_weights(
+    conn: &Connection,
+    widget_instance_id: &str,
+    weights: &[WidgetPaneWeightInput],
+) -> anyhow::Result<Vec<WidgetPaneDto>> {
+    ensure_widget_exists(conn, widget_instance_id)?;
+    let existing = list_widget_panes(conn, widget_instance_id)?;
+    if existing.len() != weights.len() {
+        bail!("pane weights must include every pane exactly once");
+    }
+    let pane_ids: HashSet<&str> = weights.iter().map(|item| item.pane_id.as_str()).collect();
+    if pane_ids.len() != weights.len() {
+        bail!("pane weights cannot contain duplicate pane IDs");
+    }
+    let existing_ids: HashSet<&str> = existing.iter().map(|pane| pane.id.as_str()).collect();
+    if pane_ids != existing_ids {
+        bail!("pane weights must belong to the selected widget");
+    }
+    for item in weights {
+        validate_size_weight(item.size_weight)?;
+    }
+
+    let transaction = conn.unchecked_transaction()?;
+    let now = Utc::now().to_rfc3339();
+    for item in weights {
+        transaction.execute(
+            "UPDATE widget_panes SET size_weight = ?2, updated_at = ?3
+             WHERE id = ?1 AND widget_instance_id = ?4",
+            params![item.pane_id, item.size_weight, now, widget_instance_id],
+        )?;
+    }
+    transaction.commit()?;
+    list_widget_panes(conn, widget_instance_id)
+}
+
+pub fn reset_widget_pane_weights(
+    conn: &Connection,
+    widget_instance_id: &str,
+) -> anyhow::Result<Vec<WidgetPaneDto>> {
+    ensure_widget_exists(conn, widget_instance_id)?;
+    let transaction = conn.unchecked_transaction()?;
+    transaction.execute(
+        "UPDATE widget_panes SET size_weight = 1.0, updated_at = ?2
+         WHERE widget_instance_id = ?1",
+        params![widget_instance_id, Utc::now().to_rfc3339()],
+    )?;
     transaction.commit()?;
     list_widget_panes(conn, widget_instance_id)
 }
@@ -752,7 +810,7 @@ pub fn list_widget_panes(
 ) -> anyhow::Result<Vec<WidgetPaneDto>> {
     let mut stmt = conn.prepare(
         "SELECT id, widget_instance_id, list_id, title_override, theme_id, sort_order,
-                show_completed, max_tasks, created_at, updated_at
+                show_completed, max_tasks, size_weight, created_at, updated_at
          FROM widget_panes WHERE widget_instance_id = ?1 ORDER BY sort_order, id",
     )?;
     let mut rows = stmt.query(params![widget_instance_id])?;
@@ -773,8 +831,8 @@ pub fn create_widget_pane(
     conn.execute(
         "INSERT INTO widget_panes
          (id, widget_instance_id, list_id, title_override, theme_id, sort_order,
-          show_completed, max_tasks, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)",
+          show_completed, max_tasks, size_weight, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
         params![
             id,
             input.widget_instance_id,
@@ -784,6 +842,7 @@ pub fn create_widget_pane(
             input.sort_order,
             input.show_completed.map(i64::from),
             input.max_tasks,
+            input.size_weight,
             now
         ],
     )?;
@@ -799,7 +858,8 @@ pub fn update_widget_pane(
     let changed = conn.execute(
         "UPDATE widget_panes
          SET widget_instance_id = ?2, list_id = ?3, title_override = ?4, theme_id = ?5,
-             sort_order = ?6, show_completed = ?7, max_tasks = ?8, updated_at = ?9
+             sort_order = ?6, show_completed = ?7, max_tasks = ?8, size_weight = ?9,
+             updated_at = ?10
          WHERE id = ?1",
         params![
             id,
@@ -810,6 +870,7 @@ pub fn update_widget_pane(
             input.sort_order,
             input.show_completed.map(i64::from),
             input.max_tasks,
+            input.size_weight,
             Utc::now().to_rfc3339()
         ],
     )?;
@@ -968,7 +1029,7 @@ pub fn resolve_widget_pane_theme(
 fn get_widget_pane(conn: &Connection, id: &str) -> anyhow::Result<WidgetPaneDto> {
     let mut stmt = conn.prepare(
         "SELECT id, widget_instance_id, list_id, title_override, theme_id, sort_order,
-                show_completed, max_tasks, created_at, updated_at
+                show_completed, max_tasks, size_weight, created_at, updated_at
          FROM widget_panes WHERE id = ?1",
     )?;
     let mut rows = stmt.query(params![id])?;
@@ -1038,6 +1099,26 @@ fn ensure_widget_instance_column(
     if !exists {
         conn.execute(
             &format!("ALTER TABLE widget_instances ADD COLUMN {name} {definition}"),
+            [],
+        )?;
+    }
+    Ok(())
+}
+
+fn ensure_widget_pane_column(
+    conn: &Connection,
+    name: &str,
+    definition: &str,
+) -> anyhow::Result<()> {
+    let exists = conn
+        .prepare("PRAGMA table_info(widget_panes)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?
+        .iter()
+        .any(|column| column == name);
+    if !exists {
+        conn.execute(
+            &format!("ALTER TABLE widget_panes ADD COLUMN {name} {definition}"),
             [],
         )?;
     }
@@ -1143,8 +1224,9 @@ fn widget_pane_from_row(row: &Row<'_>) -> anyhow::Result<WidgetPaneDto> {
         sort_order: row.get(5)?,
         show_completed: row.get::<_, Option<i64>>(6)?.map(|value| value != 0),
         max_tasks: row.get(7)?,
-        created_at: row.get(8)?,
-        updated_at: row.get(9)?,
+        size_weight: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
     })
 }
 
@@ -1178,6 +1260,14 @@ fn validate_pane_input(conn: &Connection, input: &WidgetPaneInput) -> anyhow::Re
         if title.trim().len() > 120 {
             bail!("pane title override must be at most 120 characters");
         }
+    }
+    validate_size_weight(input.size_weight)?;
+    Ok(())
+}
+
+fn validate_size_weight(value: f64) -> anyhow::Result<()> {
+    if !value.is_finite() || !(0.05..=100.0).contains(&value) {
+        bail!("pane sizeWeight must be finite and between 0.05 and 100");
     }
     Ok(())
 }
@@ -1311,6 +1401,7 @@ mod tests {
             sort_order: order,
             show_completed: None,
             max_tasks: None,
+            size_weight: 1.0,
         }
     }
 
@@ -1947,6 +2038,7 @@ mod tests {
                 sort_order: second.sort_order,
                 show_completed: Some(true),
                 max_tasks: Some(25),
+                size_weight: 2.5,
             },
         )
         .expect("configure second pane");
@@ -1968,6 +2060,7 @@ mod tests {
         assert_eq!(panes[1].theme_id.as_deref(), Some(VIOLET_THEME_ID));
         assert_eq!(panes[1].show_completed, Some(true));
         assert_eq!(panes[1].max_tasks, Some(25));
+        assert_eq!(panes[1].size_weight, 2.5);
     }
 
     #[test]
@@ -2002,6 +2095,7 @@ mod tests {
                 sort_order: pane.sort_order,
                 show_completed: pane.show_completed,
                 max_tasks: pane.max_tasks,
+                size_weight: pane.size_weight,
             },
         )
         .expect("update pane title");
@@ -2119,6 +2213,150 @@ mod tests {
     }
 
     #[test]
+    fn new_panes_default_to_equal_size_weight() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).unwrap();
+        let pane = create_pane_for_widget(&conn, DEFAULT_WIDGET_ID, None).unwrap();
+        assert_eq!(pane.size_weight, 1.0);
+    }
+
+    #[test]
+    fn pane_weights_persist_and_reset_atomically() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).unwrap();
+        let second = create_pane_for_widget(&conn, DEFAULT_WIDGET_ID, None).unwrap();
+        let weights = vec![
+            WidgetPaneWeightInput {
+                pane_id: DEFAULT_PANE_ID.to_string(),
+                size_weight: 2.5,
+            },
+            WidgetPaneWeightInput {
+                pane_id: second.id.clone(),
+                size_weight: 0.75,
+            },
+        ];
+        let resized = set_widget_pane_weights(&conn, DEFAULT_WIDGET_ID, &weights).unwrap();
+        assert_eq!(resized[0].size_weight, 2.5);
+        assert_eq!(resized[1].size_weight, 0.75);
+
+        let reset = reset_widget_pane_weights(&conn, DEFAULT_WIDGET_ID).unwrap();
+        assert!(reset.iter().all(|pane| pane.size_weight == 1.0));
+    }
+
+    #[test]
+    fn invalid_pane_weights_are_rejected_without_partial_updates() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).unwrap();
+        let second = create_pane_for_widget(&conn, DEFAULT_WIDGET_ID, None).unwrap();
+        for invalid in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            let result = set_widget_pane_weights(
+                &conn,
+                DEFAULT_WIDGET_ID,
+                &[
+                    WidgetPaneWeightInput {
+                        pane_id: DEFAULT_PANE_ID.to_string(),
+                        size_weight: 2.0,
+                    },
+                    WidgetPaneWeightInput {
+                        pane_id: second.id.clone(),
+                        size_weight: invalid,
+                    },
+                ],
+            );
+            assert!(result.is_err());
+            assert!(list_widget_panes(&conn, DEFAULT_WIDGET_ID)
+                .unwrap()
+                .iter()
+                .all(|pane| pane.size_weight == 1.0));
+        }
+    }
+
+    #[test]
+    fn pane_weight_bulk_update_rejects_foreign_panes() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).unwrap();
+        let second = create_pane_for_widget(&conn, DEFAULT_WIDGET_ID, None).unwrap();
+        let foreign_widget = create_widget_with_default_pane(&conn, None).unwrap();
+        let foreign = list_widget_panes(&conn, &foreign_widget.id).unwrap()[0].clone();
+        let error = set_widget_pane_weights(
+            &conn,
+            DEFAULT_WIDGET_ID,
+            &[
+                WidgetPaneWeightInput {
+                    pane_id: DEFAULT_PANE_ID.to_string(),
+                    size_weight: 2.0,
+                },
+                WidgetPaneWeightInput {
+                    pane_id: foreign.id,
+                    size_weight: 3.0,
+                },
+            ],
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("selected widget"));
+        assert_eq!(second.size_weight, 1.0);
+    }
+
+    #[test]
+    fn reorder_and_delete_preserve_pane_identity_weights() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).unwrap();
+        let second = create_pane_for_widget(&conn, DEFAULT_WIDGET_ID, None).unwrap();
+        let third = create_pane_for_widget(&conn, DEFAULT_WIDGET_ID, None).unwrap();
+        set_widget_pane_weights(
+            &conn,
+            DEFAULT_WIDGET_ID,
+            &[
+                WidgetPaneWeightInput {
+                    pane_id: DEFAULT_PANE_ID.to_string(),
+                    size_weight: 2.0,
+                },
+                WidgetPaneWeightInput {
+                    pane_id: second.id.clone(),
+                    size_weight: 1.0,
+                },
+                WidgetPaneWeightInput {
+                    pane_id: third.id.clone(),
+                    size_weight: 3.0,
+                },
+            ],
+        )
+        .unwrap();
+
+        let reordered = reorder_widget_panes(
+            &conn,
+            DEFAULT_WIDGET_ID,
+            &[
+                third.id.clone(),
+                DEFAULT_PANE_ID.to_string(),
+                second.id.clone(),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            reordered
+                .iter()
+                .map(|pane| (pane.id.as_str(), pane.size_weight))
+                .collect::<Vec<_>>(),
+            vec![
+                (third.id.as_str(), 3.0),
+                (DEFAULT_PANE_ID, 2.0),
+                (second.id.as_str(), 1.0)
+            ]
+        );
+
+        delete_widget_pane_for_widget(&conn, DEFAULT_WIDGET_ID, &second.id).unwrap();
+        let remaining = list_widget_panes(&conn, DEFAULT_WIDGET_ID).unwrap();
+        assert_eq!(
+            remaining
+                .iter()
+                .map(|pane| pane.size_weight)
+                .collect::<Vec<_>>(),
+            vec![3.0, 2.0]
+        );
+    }
+
+    #[test]
     fn legacy_always_on_top_seeds_primary_pinned_once() {
         let conn = test_db();
         db::save_settings(
@@ -2163,6 +2401,11 @@ mod tests {
             INSERT INTO widget_instances
               (id, name, layout_mode, default_theme_id, created_at, updated_at)
               VALUES ('main', 'Main', 'single', NULL, '2026-01-01', '2026-01-01');
+            INSERT INTO widget_panes
+              (id, widget_instance_id, list_id, title_override, theme_id, sort_order,
+               show_completed, max_tasks, created_at, updated_at)
+              VALUES ('legacy-pane', 'main', NULL, NULL, NULL, 0, NULL, NULL,
+                      '2026-01-01', '2026-01-01');
             "#,
         )
         .expect("create 4A schema");
@@ -2176,6 +2419,9 @@ mod tests {
         assert_eq!(primary.id, DEFAULT_WIDGET_ID);
         assert!(primary.is_open);
         assert!(primary.pinned);
+        let panes = list_widget_panes(&conn, DEFAULT_WIDGET_ID).unwrap();
+        assert_eq!(panes.len(), 1);
+        assert_eq!(panes[0].size_weight, 1.0);
         assert_eq!(
             list_widget_instances(&conn)
                 .unwrap()

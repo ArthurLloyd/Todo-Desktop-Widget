@@ -199,6 +199,7 @@ pub struct WidgetPaneDto {
     pub sort_order: i64,
     pub show_completed: Option<bool>,
     pub max_tasks: Option<i64>,
+    pub size_weight: f64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -213,6 +214,14 @@ pub struct WidgetPaneInput {
     pub sort_order: i64,
     pub show_completed: Option<bool>,
     pub max_tasks: Option<i64>,
+    pub size_weight: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetPaneWeightInput {
+    pub pane_id: String,
+    pub size_weight: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]

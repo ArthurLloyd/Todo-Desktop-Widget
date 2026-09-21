@@ -16,6 +16,7 @@ import type {
   WidgetInstance,
   WidgetLayoutMode,
   WidgetPane,
+  WidgetPaneWeightInput,
   WidgetTheme,
   WidgetThemeInput,
 } from "./lib/types";
@@ -354,6 +355,11 @@ function WidgetApp() {
     }
   }
 
+  async function handlePaneWeightsChange(weights: WidgetPaneWeightInput[]) {
+    const panes = await api.setCurrentWidgetPaneWeights(weights);
+    setWidgetContext((current) => current ? { ...current, panes } : current);
+  }
+
   async function handleWidgetThemeChange(themeId: string) {
     setWidgetConfigError(null);
     try {
@@ -419,6 +425,7 @@ function WidgetApp() {
           <PaneLayout
             layoutMode={widgetContext.instance.layoutMode}
             panes={widgetContext.panes}
+            onPersistWeights={handlePaneWeightsChange}
             renderPane={(pane) => {
               const list = taskLists.find((item) => item.id === pane.listId) || null;
               const showCompleted = pane.showCompleted ?? settings.showCompleted;

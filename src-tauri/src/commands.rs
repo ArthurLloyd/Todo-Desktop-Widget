@@ -7,8 +7,8 @@ use crate::{
     models::{
         AuthStatusDto, LoginStartDto, SettingsDto, SettingsPatch, SyncStatusDto, TaskDto,
         TaskListDto, TaskPatchDto, WidgetContextDto, WidgetInstanceDto, WidgetInstanceInput,
-        WidgetLayoutMode, WidgetPaneDto, WidgetPaneInput, WidgetTaskSnapshotDto, WidgetThemeDto,
-        WidgetThemeInput,
+        WidgetLayoutMode, WidgetPaneDto, WidgetPaneInput, WidgetPaneWeightInput,
+        WidgetTaskSnapshotDto, WidgetThemeDto, WidgetThemeInput,
     },
     settings,
     sync_coordinator::GlobalSyncReason,
@@ -511,6 +511,23 @@ pub fn reorder_managed_widget_panes(
 }
 
 #[tauri::command]
+pub fn reset_managed_widget_pane_weights(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> Result<Vec<WidgetPaneDto>, String> {
+    let panes = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::reset_widget_pane_weights(&conn, &instance_id).map_err(to_string)?
+    };
+    widget_window::emit_widget_config_changed(&app, &instance_id);
+    Ok(panes)
+}
+
+#[tauri::command]
 pub fn create_widget_instance(
     state: State<'_, AppState>,
     input: WidgetInstanceInput,
@@ -612,6 +629,25 @@ pub fn delete_widget_pane(
     drop(conn);
     widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
     Ok(())
+}
+
+#[tauri::command]
+pub fn set_current_widget_pane_weights(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    weights: Vec<WidgetPaneWeightInput>,
+) -> Result<Vec<WidgetPaneDto>, String> {
+    let context = widget_window::resolve_widget_context(&window, &state)?;
+    let panes = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::set_widget_pane_weights(&conn, &context.instance.id, &weights)
+            .map_err(to_string)?
+    };
+    widget_window::emit_widget_config_changed(window.app_handle(), &context.instance.id);
+    Ok(panes)
 }
 
 #[tauri::command]

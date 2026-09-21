@@ -45,6 +45,7 @@ export function WidgetPaneEditor({
       sortOrder: pane.sortOrder,
       showCompleted: pane.showCompleted ?? null,
       maxTasks: pane.maxTasks ?? null,
+      sizeWeight: pane.sizeWeight,
       ...patch,
     };
   }

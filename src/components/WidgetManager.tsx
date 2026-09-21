@@ -318,6 +318,10 @@ export function WidgetManager({
                 await refreshDetail(context.instance.id);
               })}
               onMovePane={movePane}
+              onResetPaneSizes={() => void runAction(async () => {
+                await api.resetManagedWidgetPaneWeights(context.instance.id);
+                await refreshDetail(context.instance.id);
+              })}
               onManageThemes={onManageThemes}
             />
           ) : (
