@@ -13,6 +13,9 @@ import type {
 import { ManagementShell } from "./ManagementShell";
 import { InlineError } from "./InlineError";
 
+const UPSTREAM_PROJECT_URL = "https://github.com/Chenzo1001/Microsoft-Todo-Desktop-Widget";
+const IMPROVEMENT_AUTHOR = "涂风";
+
 type Props = {
   managementThemeStyle: ManagementThemeCssVariables;
   auth: AuthStatus;
@@ -283,6 +286,16 @@ export function SettingsPanel({
             <div><dt>{t("about.version")}</dt><dd>{appInfo.version}</dd></div>
             <div><dt>{t("about.platform")}</dt><dd>{appInfo.platform} · {appInfo.architecture}</dd></div>
           </dl>
+          <p className="about-card__attribution">
+            {t("about.basedOn")} {" "}
+            <a href={UPSTREAM_PROJECT_URL} target="_blank" rel="noreferrer noopener">
+              Chenzo1001/Microsoft-Todo-Desktop-Widget
+            </a>
+          </p>
+          <p className="about-card__credit">
+            <span>{t("about.improvedBy")}</span>
+            <strong>{IMPROVEMENT_AUTHOR}</strong>
+          </p>
         </section>
       ) : null}
       </div>

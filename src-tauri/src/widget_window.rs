@@ -154,6 +154,9 @@ async fn create_widget_window(
 
     restore_geometry(&window, instance)?;
     mark_open(app, &instance.id, true)?;
+    // Explorer must observe the top-level window before mode restoration so
+    // normal widgets participate in Show Desktop (Win+D).
+    window.show().map_err(to_string)?;
     if instance.pinned {
         crate::desktop_window::set_widget_window_mode(&window, "pinned").await?;
     } else {

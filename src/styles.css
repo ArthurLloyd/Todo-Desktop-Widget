@@ -2290,6 +2290,39 @@ button {
   text-align: right;
 }
 
+.about-card__attribution {
+  margin: 2px 0 0;
+  color: var(--management-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.about-card__attribution a {
+  color: var(--management-accent);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.about-card__attribution a:hover,
+.about-card__attribution a:focus-visible {
+  text-decoration: underline;
+}
+
+.about-card__credit {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: var(--management-muted);
+  font-size: 0.78rem;
+}
+
+.about-card__credit strong {
+  color: var(--management-text);
+  font-size: 0.84rem;
+}
+
 .confirm-dialog {
   position: fixed;
   inset: 0;

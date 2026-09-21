@@ -2,6 +2,43 @@
 
 Use this checklist for each Windows release of Todo Desktop Widget. The current release process intentionally does not include an auto-updater.
 
+## 0.1.0-rc2 validation status
+
+Status values are **PASS**, **FAIL**, and **NOT TESTED**. A PASS below means the item
+was observed on RC2 or verified by the final automated pipeline; earlier development-stage
+validation alone is not treated as installed-build evidence.
+
+| Status | Check |
+| --- | --- |
+| PASS | Version `0.1.0` is consistent across package, Cargo, Tauri, installer, and About metadata. |
+| PASS | About includes bilingual attribution to the upstream `Chenzo1001/Microsoft-Todo-Desktop-Widget` project and credits `涂风` as the improvement author. |
+| PASS | Git state was reviewed; generated schemas, local release configuration, and RC artifacts are excluded. |
+| NOT TESTED | Repository license suitability still requires explicit owner review before public distribution. |
+| PASS | A real Entra public-client ID and tenant `common` were supplied outside Git. |
+| PASS | PKCE loopback OAuth, scopes, restart persistence, initial sync, and installed online CRUD passed. |
+| PASS | No Client Secret, token, `.env`, certificate, database, or credential data is included in the RC directory. |
+| PASS | Frontend build/tests (29/29), Rust check/fmt/tests (67/67), Windows bundles, and smoke test passed. |
+| PASS | Standalone EXE, NSIS, MSI, hashes, and unsigned status are recorded in the RC2 manifest. |
+| PASS | Host NSIS installation runs from `%LOCALAPPDATA%\\Todo Desktop Widget`; AppData remains under `%APPDATA%`. |
+| PASS | Same-version reinstall retained OAuth and cached configuration. |
+| PASS | RC2 Normal disappears with Win+D; Pinned remains and is covered by Chrome. |
+| PASS | Primary Task Details and online Create/Edit/Complete/Delete passed. |
+| NOT TESTED | Full offline restart/reconnect and final official-client assertions were interrupted. |
+| NOT TESTED | Installed RC2 multi-window, multi-pane, pane resize, Theme Manager, and Widget Manager were not repeated. |
+| NOT TESTED | Installed single-instance routing was not repeated after the host reinstall. |
+| NOT TESTED | Autostart enable/disable and Windows sign-out/sign-in recovery were not exercised. |
+| NOT TESTED | Multi-monitor restore was not exercised; two displays were detected. |
+| NOT TESTED | Only 96 DPI / 100% was observed; 125% and 150% were not exercised. |
+| NOT TESTED | A Chinese-character Windows profile was not available. |
+| NOT TESTED | Temporary `0.1.1` upgrade and migration retention were not exercised. |
+| NOT TESTED | Host NSIS uninstall retain/delete-AppData options and credential retention were not exercised on RC2. |
+| NOT TESTED | MSI installation, CRUD, autostart, and uninstall were not exercised. |
+| NOT TESTED | SmartScreen presentation and all icon surfaces were not recorded. |
+| PASS | RC2 is explicitly unsigned; trusted signing remains pending for public release. |
+
+See `docs/RC_TEST_REPORT.md` for detailed evidence, the fixed Win+D regression, and
+remaining release blockers. The reusable procedural checklist follows.
+
 ## Version and source state
 
 - [ ] Confirm the intended version in `package.json`.

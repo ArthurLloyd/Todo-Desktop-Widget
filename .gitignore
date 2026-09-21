@@ -13,5 +13,6 @@ ms-todo-desktop-widget.config.json
 *.key
 certificates/
 release.local.json
+release-candidate/
 *.log
 .DS_Store

@@ -25,7 +25,7 @@
         "skipTaskbar": true,
         "alwaysOnTop": false,
         "alwaysOnBottom": false,
-        "visible": false
+        "visible": true
       }
     ],
     "macOSPrivateApi": true,
