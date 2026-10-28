@@ -100,6 +100,7 @@ export type WidgetThemeConfig = {
 };
 
 export type WidgetInstance = {
+  opacity?: number | null;
   id: string;
   name: string;
   layoutMode: WidgetLayoutMode;

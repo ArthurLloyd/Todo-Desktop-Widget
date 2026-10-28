@@ -39,7 +39,11 @@ pub async fn set_widget_window_mode(window: &WebviewWindow, mode: &str) -> Resul
         Err(error) => eprintln!("[desktop] failed to read state after mode change: {error}"),
     }
 
-    result
+    result?;
+    // Owner/Z-order changes invalidate the non-client frame. Recalculate it
+    // once on the UI thread so WebView2 gets the final client bounds at startup.
+    let native_window = window.clone();
+    run_on_main_thread(window, move || platform::refresh_frame(&native_window)).await
 }
 
 pub fn is_owner_attached(app: &AppHandle, label: &str) -> bool {
@@ -282,8 +286,8 @@ mod platform {
             HiDpi::GetDpiForWindow,
             WindowsAndMessaging::{
                 EnumWindows, FindWindowExW, GetClassNameW, GetParent, GetWindowLongPtrW, IsWindow,
-                SetWindowLongPtrW, SetWindowPos, GWLP_HWNDPARENT, HWND_TOP, SWP_NOACTIVATE,
-                SWP_NOMOVE, SWP_NOSIZE,
+                SetWindowLongPtrW, SetWindowPos, GWLP_HWNDPARENT, HWND_TOP, SWP_FRAMECHANGED,
+                SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
             },
         },
     };
@@ -294,6 +298,25 @@ mod platform {
     struct DesktopHost {
         host: HWND,
         def_view: HWND,
+    }
+
+    pub(super) fn refresh_frame(window: &WebviewWindow) -> Result<(), String> {
+        let hwnd = window.hwnd().map_err(|error| error.to_string())?.0 as HWND;
+        unsafe {
+            if SetWindowPos(
+                hwnd,
+                null_mut(),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            ) == 0
+            {
+                return Err(last_error("refresh widget frame", hwnd));
+            }
+        }
+        Ok(())
     }
 
     struct EnumContext {
@@ -664,6 +687,10 @@ mod platform {
     use tauri::WebviewWindow;
 
     use super::DesktopOwnerAttachment;
+
+    pub(super) fn refresh_frame(_window: &WebviewWindow) -> Result<(), String> {
+        Ok(())
+    }
 
     pub(super) fn attach_desktop_owner(
         _window: &WebviewWindow,

@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { ThemeCssVariables } from "../lib/themeRuntime";
 
 type Props = {
+  management?: boolean;
   opacity: number;
   fontFamily: string;
   fontScale: number;
@@ -9,10 +10,10 @@ type Props = {
   children: ReactNode;
 };
 
-export function WidgetShell({ opacity, fontFamily, fontScale, themeStyle, children }: Props) {
+export function WidgetShell({ management, opacity, fontFamily, fontScale, themeStyle, children }: Props) {
   return (
     <main
-      className="widget-shell"
+      className={management ? "widget-shell settings-window" : "widget-shell"}
       data-font={fontFamily}
       style={
         {

@@ -37,6 +37,8 @@ use rusqlite::Connection;
 use {anyhow::Context, tauri::Manager};
 
 pub struct AppState {
+    pub list_mutation_lock: tokio::sync::Mutex<()>,
+    pub settings_window_lock: tokio::sync::Mutex<()>,
     pub db: Mutex<Connection>,
     pub http: reqwest::Client,
     pub sync_status: Mutex<SyncStatusDto>,
@@ -70,6 +72,8 @@ impl AppState {
         let _ = widget_snapshot::export_today(&conn, &macos_app_group_id);
 
         Ok(Self {
+            list_mutation_lock: tokio::sync::Mutex::new(()),
+            settings_window_lock: tokio::sync::Mutex::new(()),
             db: Mutex::new(conn),
             http: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
@@ -141,6 +145,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_today_tasks,
             commands::get_task_lists,
+            commands::create_task_list,
+            commands::set_widget_opacity,
+            commands::open_settings_window,
+            commands::close_settings_window,
             commands::get_tasks_for_list,
             commands::get_local_widget_snapshot,
             commands::get_task,

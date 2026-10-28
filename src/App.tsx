@@ -80,10 +80,14 @@ export default function App() {
     return null;
   }
 
-  return <WidgetApp />;
+  return <WidgetApp management={view === "settings" || windowLabel === "settings"} />;
 }
 
-function WidgetApp() {
+function WidgetApp({ management = false }: { management?: boolean }) {
+  const [selectedWidgetId, setSelectedWidgetId] = useState(getRoute().get("widgetId") || "main");
+  const contextGeneration = useRef(0);
+  const selectedWidgetIdRef = useRef(selectedWidgetId);
+  selectedWidgetIdRef.current = selectedWidgetId;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [taskLists, setTaskLists] = useState<TodoList[]>([]);
   const [inboxCount, setInboxCount] = useState(0);
@@ -98,7 +102,7 @@ function WidgetApp() {
   const widgetInstanceIdRef = useRef<string | null>(null);
   const [widgetInstances, setWidgetInstances] = useState<WidgetInstance[]>([]);
   const [widgetConfigError, setWidgetConfigError] = useState<string | null>(null);
-  const [view, dispatchView] = useReducer(reduceWidgetView, "widget");
+  const [view, dispatchView] = useReducer(reduceWidgetView, management ? "settings" : "widget");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [loginNotice, setLoginNotice] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>(() => readSortMode());
@@ -115,9 +119,10 @@ function WidgetApp() {
     () => resolveWidgetTheme(themeMap, widgetContext?.instance.defaultThemeId),
     [themeMap, widgetContext?.instance.defaultThemeId],
   );
+  const windowOpacity = widgetContext?.instance.opacity ?? settings.opacity;
   const widgetThemeStyle = useMemo(
-    () => widgetTheme ? themeToCssVariables(widgetTheme.config, settings.opacity) : undefined,
-    [settings.opacity, widgetTheme],
+    () => widgetTheme ? themeToCssVariables(widgetTheme.config, windowOpacity) : undefined,
+    [windowOpacity, widgetTheme],
   );
   const managementThemeStyle = useMemo(
     () => deriveManagementTheme(widgetTheme?.config),
@@ -146,14 +151,16 @@ function WidgetApp() {
   }, []);
 
   const reloadWidgetContext = useCallback(async () => {
+    const generation = ++contextGeneration.current;
     const [nextContext, nextThemes] = await Promise.all([
-      api.getCurrentWidgetContext(),
+      management ? api.getWidgetContext(selectedWidgetIdRef.current) : api.getCurrentWidgetContext(),
       api.listWidgetThemes(),
     ]);
+    if (generation !== contextGeneration.current) return;
     widgetInstanceIdRef.current = nextContext.instance.id;
     setWidgetContext(nextContext);
     setWidgetThemes(nextThemes);
-  }, []);
+  }, [management, selectedWidgetId]);
 
   const reloadWidgetInstances = useCallback(async () => {
     const nextInstances = await api.listWidgetInstances();
@@ -184,39 +191,35 @@ function WidgetApp() {
   }, [loadInitialState]);
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let unlistenConfig: (() => void) | undefined;
-    let unlistenThemes: (() => void) | undefined;
-    let unlistenOpenSettings: (() => void) | undefined;
-    void listen("local-tasks-changed", () => void refreshTaskData()).then((nextUnlisten) => {
-      unlisten = nextUnlisten;
-    });
-    void listen<WidgetConfigChanged>("widget-config-changed", (event) => {
+    let disposed = false;
+    const listeners: (() => void)[] = [];
+    function register(promise: Promise<() => void>) {
+      void promise.then((stop) => disposed ? stop() : listeners.push(stop)).catch(() => {});
+    }
+    register(listen("local-tasks-changed", () => void refreshTaskData()));
+    register(listen<Settings>("settings-changed", (event) => setSettings(event.payload)));
+    register(listen<WidgetConfigChanged>("widget-config-changed", (event) => {
       void reloadWidgetInstances();
-      if (event.payload.widgetInstanceId === widgetInstanceIdRef.current) {
-        void reloadWidgetContext();
-      }
-    }).then((nextUnlisten) => {
-      unlistenConfig = nextUnlisten;
-    });
-    void listen("theme-definitions-changed", () => {
-      void reloadWidgetContext();
-    }).then((nextUnlisten) => {
-      unlistenThemes = nextUnlisten;
-    });
-    void listen("open-settings", () => {
-      setContextMenu((current) => ({ ...current, open: false }));
+      if (event.payload.widgetInstanceId === widgetInstanceIdRef.current) void reloadWidgetContext();
+    }));
+    register(listen("theme-definitions-changed", () => void reloadWidgetContext()));
+    register(listen<string>("select-settings-widget", (event) => {
+      if (!management) return;
+      setSelectedWidgetId(event.payload);
       dispatchView({ type: "open-settings" });
-    }).then((nextUnlisten) => {
-      unlistenOpenSettings = nextUnlisten;
-    });
-    return () => {
-      unlisten?.();
-      unlistenConfig?.();
-      unlistenThemes?.();
-      unlistenOpenSettings?.();
-    };
-  }, [refreshTaskData, reloadWidgetContext, reloadWidgetInstances]);
+    }));
+    register(listen("open-settings", () => {
+      if (management) dispatchView({ type: "open-settings" });
+      else void api.openSettingsWindow(widgetInstanceIdRef.current || "main");
+    }));
+    return () => { disposed = true; listeners.forEach((stop) => stop()); };
+  }, [management, refreshTaskData, reloadWidgetContext, reloadWidgetInstances]);
+
+  useEffect(() => {
+    if (management && widgetInstances.length && !widgetInstances.some((item) => item.id === selectedWidgetId)) {
+      setSelectedWidgetId(widgetInstances[0].id);
+    }
+  }, [management, widgetInstances, selectedWidgetId]);
 
   useEffect(() => {
     if (view !== "widget") return;
@@ -344,15 +347,18 @@ function WidgetApp() {
 
   async function handleTogglePinned() {
     if (!widgetContext) return;
+    const instanceId = widgetContext.instance.id;
     const pinned = !widgetContext.instance.pinned;
-    await api.setWindowMode(pinned ? "pinned" : "normal");
-    setWidgetContext((current) => current ? {
-      ...current,
-      instance: { ...current.instance, pinned },
-    } : current);
-    setWidgetInstances((current) => current.map((instance) =>
-      instance.id === widgetContext.instance.id ? { ...instance, pinned } : instance,
-    ));
+    setWidgetConfigError(null);
+    try {
+      await api.setManagedWidgetPinned(instanceId, pinned);
+      setWidgetContext((current) => current?.instance.id === instanceId ? {
+        ...current, instance: { ...current.instance, pinned },
+      } : current);
+      setWidgetInstances((current) => current.map((instance) =>
+        instance.id === instanceId ? { ...instance, pinned } : instance,
+      ));
+    } catch (error) { setWidgetConfigError(String(error)); }
   }
 
   async function handleSelectPaneList(paneId: string, listId: string) {
@@ -368,7 +374,10 @@ function WidgetApp() {
   async function handleLayoutChange(layoutMode: WidgetLayoutMode) {
     setWidgetConfigError(null);
     try {
-      await api.updateCurrentWidgetLayout(layoutMode);
+      if (!widgetContext) return;
+      await api.updateManagedWidget(widgetContext.instance.id, {
+        name: widgetContext.instance.name, defaultThemeId: widgetContext.instance.defaultThemeId, layoutMode,
+      });
       await reloadWidgetContext();
     } catch (error) {
       setWidgetConfigError(error instanceof Error ? error.message : String(error));
@@ -383,7 +392,10 @@ function WidgetApp() {
   async function handleWidgetThemeChange(themeId: string) {
     setWidgetConfigError(null);
     try {
-      await api.setCurrentWidgetTheme(themeId);
+      if (!widgetContext) return;
+      await api.updateManagedWidget(widgetContext.instance.id, {
+        name: widgetContext.instance.name, layoutMode: widgetContext.instance.layoutMode, defaultThemeId: themeId,
+      });
       await reloadWidgetContext();
     } catch (error) {
       setWidgetConfigError(error instanceof Error ? error.message : String(error));
@@ -413,13 +425,33 @@ function WidgetApp() {
 
   function openSettings() {
     setContextMenu((current) => ({ ...current, open: false }));
-    dispatchView({ type: "open-settings" });
+    void api.openSettingsWindow(widgetContext?.instance.id || "main").catch((error) => {
+      setWidgetConfigError(String(error));
+    });
+  }
+
+  function closeManagement() {
+    if (management) void api.closeSettingsWindow();
+    else dispatchView({ type: "close" });
+  }
+
+  async function handleCreateList(name: string, paneId: string) {
+    const list = await api.createTaskList(name);
+    // Creation succeeded; keep the new list available even if binding fails.
+    setTaskLists((current) => [...current.filter((item) => item.id !== list.id), list]);
+    try {
+      await api.setCurrentWidgetPaneList(paneId, list.id);
+      await reloadWidgetContext();
+    } catch (error) {
+      setWidgetConfigError(String(error));
+    }
   }
 
   return (
     <I18nProvider language={settings.language}>
       <WidgetShell
-        opacity={settings.opacity}
+        management={management}
+        opacity={windowOpacity}
         fontFamily={settings.fontFamily}
         fontScale={settings.fontScale}
         themeStyle={widgetThemeStyle}
@@ -466,7 +498,7 @@ function WidgetApp() {
                 .slice(0, pane.maxTasks ?? undefined);
               const paneTheme = resolvePaneThemeOverride(themeMap, pane.themeId);
               const paneThemeStyle = paneTheme
-                ? themeToCssVariables(paneTheme.config, settings.opacity)
+                ? themeToCssVariables(paneTheme.config, windowOpacity)
                 : undefined;
               return (
                 <WidgetPaneView
@@ -478,6 +510,8 @@ function WidgetApp() {
                   completingIds={completingIds}
                   themeStyle={paneThemeStyle}
                   onSelectList={(paneId, listId) => void handleSelectPaneList(paneId, listId)}
+                  onCreateList={(name) => handleCreateList(name, pane.id)}
+                  canCreateList={auth.loggedIn}
                   onAdd={handlePaneAdd}
                   onComplete={handleComplete}
                   onOpenDetails={(task) => void api.openTaskDetails(task.id)}
@@ -486,6 +520,7 @@ function WidgetApp() {
             }}
           />
         ) : null}
+        {widgetConfigError ? <div role="alert" className="inline-error">{widgetConfigError}</div> : null}
         {startupPresentation === "ready" ? (
           <FooterStatus inboxCount={inboxCount} syncStatus={syncStatus} onRetry={() => void handleSync()} />
         ) : null}
@@ -512,14 +547,23 @@ function WidgetApp() {
         settings={settings}
         appInfo={appInfo}
         loginNotice={loginNotice}
-        onClose={() => dispatchView({ type: "close" })}
+        onClose={closeManagement}
         onLogin={() => void handleLogin()}
         onLogout={() => void api.logout().then(() => refreshTaskData())}
         onChange={handleSettingsChange}
         onEnsureLists={() => void handleSync()}
-        currentWidget={widgetContext}
+        currentWidget={widgetContext?.instance.id === selectedWidgetId || !management ? widgetContext : null}
+        instances={widgetInstances}
+        selectedWidgetId={selectedWidgetId}
+        onSelectWidget={setSelectedWidgetId}
+        windowOpacity={windowOpacity}
+        onOpacityChange={async (opacity) => {
+          if (!widgetContext) return;
+          const updated = await api.setWidgetOpacity(widgetContext.instance.id, opacity);
+          setWidgetContext((current) => current?.instance.id === updated.id ? { ...current, instance: { ...current.instance, opacity: updated.opacity } } : current);
+        }}
         widgetThemes={widgetThemes}
-        configError={widgetConfigError}
+        configError={widgetConfigError || initialLoadError}
         onTogglePinned={() => void handleTogglePinned()}
         onChangeLayout={(layoutMode) => void handleLayoutChange(layoutMode)}
         onChangeWidgetTheme={(themeId) => void handleWidgetThemeChange(themeId)}
@@ -535,7 +579,7 @@ function WidgetApp() {
           taskLists={taskLists}
           themes={widgetThemes}
           onBack={() => dispatchView({ type: "back" })}
-          onClose={() => dispatchView({ type: "close" })}
+          onClose={closeManagement}
           onRefreshInstances={reloadWidgetInstances}
           onManageThemes={() => dispatchView({ type: "open-theme-manager" })}
         />
@@ -545,9 +589,9 @@ function WidgetApp() {
         <ThemeManager
           managementThemeStyle={managementThemeStyle}
           themes={widgetThemes}
-          windowOpacity={settings.opacity}
+          windowOpacity={windowOpacity}
           onBack={() => dispatchView({ type: "back" })}
-          onClose={() => dispatchView({ type: "close" })}
+          onClose={closeManagement}
           onCreate={handleCreateTheme}
           onUpdate={handleUpdateTheme}
           onDelete={handleDeleteTheme}

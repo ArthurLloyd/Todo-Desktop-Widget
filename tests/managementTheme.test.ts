@@ -31,7 +31,7 @@ test("management background stays opaque regardless of theme opacity", () => {
   const opaque = deriveManagementTheme(theme({ backgroundOpacity: 1 }));
   const transparent = deriveManagementTheme(theme({ backgroundOpacity: 0 }));
   assert.equal(opaque["--management-bg"], transparent["--management-bg"]);
-  assert.match(String(transparent["--management-bg"]), /, 0\.97\)$/);
+  assert.match(String(transparent["--management-bg"]), /, 1\)$/);
 });
 
 test("readable accents are preserved and low contrast accents are adjusted", () => {

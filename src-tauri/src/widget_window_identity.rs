@@ -62,6 +62,7 @@ mod tests {
     fn secondary_window_label_round_trips() {
         let id = Uuid::new_v4().to_string();
         let instance = WidgetInstanceDto {
+            opacity: None,
             id: id.clone(),
             name: "Secondary".to_string(),
             layout_mode: WidgetLayoutMode::Single,

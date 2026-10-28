@@ -100,3 +100,12 @@ test("invalid pane and widget themes converge on Default", () => {
   const widgetTheme = resolveWidgetTheme(themes, "missing");
   assert.equal(resolvePaneTheme(themes, "missing-pane", widgetTheme)?.id, "default");
 });
+
+test("list creation control keeps a translucent background and contrasting text at zero window opacity", () => {
+  const light = themeToCssVariables({ ...config, background: "#FFFFFF00", foreground: "#FFFFFF" }, 0);
+  assert.equal(light["--control-background"], "rgba(255, 255, 255, 0.5)");
+  assert.equal(light["--control-text"], "#000000");
+  const dark = themeToCssVariables({ ...config, background: "#12221B00", foreground: "#000000" }, 0);
+  assert.equal(dark["--control-background"], "rgba(18, 34, 27, 0.5)");
+  assert.equal(dark["--control-text"], "#FFFFFF");
+});

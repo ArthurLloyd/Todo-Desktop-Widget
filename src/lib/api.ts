@@ -75,6 +75,11 @@ function isNonTauriError(error: unknown) {
 }
 
 export const api = {
+  createTaskList: (name: string) => call<TaskList>("create_task_list", { name }),
+  setWidgetOpacity: (instanceId: string, opacity: number) =>
+    call<WidgetInstance>("set_widget_opacity", { instanceId, opacity }),
+  openSettingsWindow: (instanceId: string) => call<void>("open_settings_window", { instanceId }),
+  closeSettingsWindow: () => call<void>("close_settings_window"),
   getTodayTasks: () => call<Task[]>("get_today_tasks", undefined, mockTasks),
   getTaskLists: () => call<TaskList[]>("get_task_lists", undefined, mockLists),
   getTask: (taskId: string) =>

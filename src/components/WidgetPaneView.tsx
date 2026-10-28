@@ -4,6 +4,7 @@ import type { ThemeCssVariables } from "../lib/themeRuntime";
 import type { Task, TaskList, WidgetPane } from "../lib/types";
 import { classifyPanePresentation } from "../lib/widgetPresentation";
 import { TaskInput } from "./TaskInput";
+import { CreateListForm } from "./CreateListForm";
 import { TaskList as TaskListView } from "./TaskList";
 
 type Props = {
@@ -15,6 +16,8 @@ type Props = {
   themeStyle?: ThemeCssVariables;
   onSelectList: (paneId: string, listId: string) => void;
   onAdd: (pane: WidgetPane, title: string) => Promise<void>;
+  onCreateList: (name: string) => Promise<void>;
+  canCreateList: boolean;
   onComplete: (taskId: string) => void;
   onOpenDetails: (task: Task) => void;
 };
@@ -28,6 +31,8 @@ export function WidgetPaneView({
   themeStyle,
   onSelectList,
   onAdd,
+  onCreateList,
+  canCreateList,
   onComplete,
   onOpenDetails,
 }: Props) {
@@ -51,7 +56,7 @@ export function WidgetPaneView({
       aria-label={title}
     >
       <header className="widget-pane__header">
-        <strong className="widget-pane__title">{title}</strong>
+        {pane.titleOverride?.trim() ? <strong className="widget-pane__title">{title}</strong> : null}
         <select
           className="pane-list-select"
           aria-label={t("pane.listSelector", { name: title })}
@@ -69,6 +74,7 @@ export function WidgetPaneView({
             </option>
           ))}
         </select>
+        <CreateListForm onCreate={onCreateList} enabled={canCreateList} />
       </header>
 
       {!list ? (

@@ -4,6 +4,8 @@ import type { WidgetTheme, WidgetThemeConfig } from "./types";
 export const DEFAULT_THEME_ID = "default";
 
 type ThemeCssVariableName =
+  | "--control-background"
+  | "--control-text"
   | "--widget-background"
   | "--widget-blur"
   | "--widget-border-radius"
@@ -46,6 +48,8 @@ export function themeToCssVariables(
   const strongSurfaceOpacity = Math.min(1, backgroundOpacity + 0.18) * opacityMultiplier;
 
   return {
+    "--control-background": hexWithOpacity(config.background.slice(0, 7), 0.5),
+    "--control-text": readableControlText(config.background),
     "--widget-background": hexWithOpacity(config.background, surfaceOpacity),
     "--widget-blur": `${config.blurPx}px`,
     "--widget-border-radius": `${config.borderRadiusPx}px`,
@@ -103,4 +107,12 @@ function clampOpacity(value: number): number {
 
 function roundAlpha(value: number): number {
   return Number(value.toFixed(4));
+}
+
+// Essential controls stay legible even when the widget background is transparent.
+function readableControlText(background: string): string {
+  const channels = [1, 3, 5].map((start) => Number.parseInt(background.slice(start, start + 2), 16) / 255)
+    .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  return (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? "#000000" : "#FFFFFF";
 }

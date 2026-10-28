@@ -66,6 +66,10 @@ pub fn init_schema(conn: &Connection) -> anyhow::Result<()> {
     )
     .context("failed to initialize widget configuration schema")?;
     for (name, definition) in [
+        (
+            "opacity",
+            "REAL NULL CHECK (opacity >= 0.0 AND opacity <= 1.0)",
+        ),
         ("is_primary", "INTEGER NOT NULL DEFAULT 0"),
         ("is_open", "INTEGER NOT NULL DEFAULT 0"),
         ("pinned", "INTEGER NOT NULL DEFAULT 0"),
@@ -285,7 +289,7 @@ pub fn list_widget_instances(conn: &Connection) -> anyhow::Result<Vec<WidgetInst
     let mut stmt = conn.prepare(
         "SELECT id, name, layout_mode, default_theme_id, is_primary, is_open, pinned,
                 (SELECT COUNT(*) FROM widget_panes WHERE widget_instance_id = widget_instances.id),
-                window_x, window_y, window_width, window_height, created_at, updated_at
+                window_x, window_y, window_width, window_height, created_at, updated_at, opacity
          FROM widget_instances ORDER BY is_primary DESC, created_at, id",
     )?;
     let mut rows = stmt.query([])?;
@@ -300,7 +304,7 @@ pub fn get_widget_instance(conn: &Connection, id: &str) -> anyhow::Result<Widget
     let mut stmt = conn.prepare(
         "SELECT id, name, layout_mode, default_theme_id, is_primary, is_open, pinned,
                 (SELECT COUNT(*) FROM widget_panes WHERE widget_instance_id = widget_instances.id),
-                window_x, window_y, window_width, window_height, created_at, updated_at
+                window_x, window_y, window_width, window_height, created_at, updated_at, opacity
          FROM widget_instances WHERE id = ?1",
     )?;
     let mut rows = stmt.query(params![id])?;
@@ -397,6 +401,10 @@ pub fn duplicate_widget_instance(
         ],
     )?;
 
+    if let Some(opacity) = source.opacity {
+        set_widget_opacity(&transaction, &id, opacity)?;
+    }
+
     for pane in source_panes {
         transaction.execute(
             "INSERT INTO widget_panes
@@ -429,6 +437,22 @@ pub fn set_widget_open(conn: &Connection, id: &str, is_open: bool) -> anyhow::Re
         params![id, i64::from(is_open), Utc::now().to_rfc3339()],
     )?;
     Ok(())
+}
+
+pub fn set_widget_opacity(
+    conn: &Connection,
+    id: &str,
+    opacity: f64,
+) -> anyhow::Result<WidgetInstanceDto> {
+    validate_range("opacity", opacity, 0.0, 1.0)?;
+    if conn.execute(
+        "UPDATE widget_instances SET opacity = ?2, updated_at = ?3 WHERE id = ?1",
+        params![id, opacity, Utc::now().to_rfc3339()],
+    )? == 0
+    {
+        bail!("widget instance not found");
+    }
+    get_widget_instance(conn, id)
 }
 
 pub fn set_widget_pinned(conn: &Connection, id: &str, pinned: bool) -> anyhow::Result<()> {
@@ -1193,6 +1217,7 @@ fn get_widget_theme_optional(
 fn widget_instance_from_row(row: &Row<'_>) -> anyhow::Result<WidgetInstanceDto> {
     let layout_mode: String = row.get(2)?;
     Ok(WidgetInstanceDto {
+        opacity: row.get(14)?,
         id: row.get(0)?,
         name: row.get(1)?,
         layout_mode: parse_layout_mode(&layout_mode)?,
@@ -1403,6 +1428,51 @@ mod tests {
             max_tasks: None,
             size_weight: 1.0,
         }
+    }
+
+    #[test]
+    fn opacity_is_isolated_persistent_and_copied() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).unwrap();
+        let other = create_widget_with_default_pane(&conn, None).unwrap();
+        set_widget_opacity(&conn, DEFAULT_WIDGET_ID, 0.23).unwrap();
+        set_widget_opacity(&conn, &other.id, 0.91).unwrap();
+        assert_eq!(
+            get_widget_instance(&conn, DEFAULT_WIDGET_ID)
+                .unwrap()
+                .opacity,
+            Some(0.23)
+        );
+        init_schema(&conn).unwrap();
+        bootstrap_defaults(&conn).unwrap();
+        assert_eq!(
+            get_widget_instance(&conn, &other.id).unwrap().opacity,
+            Some(0.91)
+        );
+        let copy = duplicate_widget_instance(&conn, &other.id).unwrap();
+        assert_eq!(copy.opacity, Some(0.91));
+        set_widget_opacity(&conn, &copy.id, 0.0).unwrap();
+        assert_eq!(
+            get_widget_instance(&conn, &other.id).unwrap().opacity,
+            Some(0.91)
+        );
+        for bad in [f64::NAN, f64::INFINITY, -0.01, 1.01] {
+            assert!(set_widget_opacity(&conn, &other.id, bad).is_err());
+        }
+        assert!(set_widget_opacity(&conn, "missing", 0.5).is_err());
+    }
+
+    #[test]
+    fn opacity_migration_preserves_legacy_windows() {
+        let conn = test_db();
+        bootstrap_defaults(&conn).unwrap();
+        conn.execute("ALTER TABLE widget_instances DROP COLUMN opacity", [])
+            .unwrap();
+        init_schema(&conn).unwrap();
+        let widget = get_widget_instance(&conn, DEFAULT_WIDGET_ID).unwrap();
+        assert_eq!(widget.opacity, None); // Frontend keeps the existing global value until edited.
+        assert_eq!(widget.name, "Main");
+        assert_eq!(widget.pane_count, 1);
     }
 
     #[test]

@@ -144,7 +144,7 @@ async fn create_widget_window(
         .resizable(true)
         .decorations(false)
         .transparent(true)
-        .shadow(true)
+        .shadow(false)
         .skip_taskbar(true)
         .always_on_top(false)
         .always_on_bottom(false)

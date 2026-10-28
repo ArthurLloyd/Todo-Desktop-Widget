@@ -18,14 +18,15 @@ export type ManagementThemeCssVariables = CSSProperties &
 
 const FALLBACK_BACKGROUND = "#111827";
 const FALLBACK_ACCENT = "#3B82F6";
-const MANAGEMENT_BACKGROUND_ALPHA = 0.97;
+const MANAGEMENT_BACKGROUND_ALPHA = 1;
 
 export function deriveManagementTheme(
   config?: WidgetThemeConfig | null,
 ): ManagementThemeCssVariables {
   const background = parseHex(config?.background) ?? parseHex(FALLBACK_BACKGROUND)!;
-  const dark = relativeLuminance(background) < 0.5;
-  const text = parseHex(dark ? "#F8FAFC" : "#111827")!;
+  const dark = relativeLuminance(background) < 0.179;
+  const preferredText = parseHex(dark ? "#F8FAFC" : "#111827")!;
+  const text = contrastRatio(preferredText, background) >= 4.5 ? preferredText : dark ? WHITE : BLACK;
   const surface = mix(background, dark ? WHITE : BLACK, dark ? 0.08 : 0.045);
   const elevated = mix(background, dark ? WHITE : BLACK, dark ? 0.14 : 0.08);
   const requestedAccent = parseHex(config?.accent) ?? parseHex(FALLBACK_ACCENT)!;

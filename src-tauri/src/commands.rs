@@ -25,6 +25,101 @@ pub fn get_today_tasks(state: State<'_, AppState>) -> Result<Vec<TaskDto>, Strin
 }
 
 #[tauri::command]
+pub async fn create_task_list(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<TaskListDto, String> {
+    let name = crate::graph::validate_list_name(&name).map_err(to_string)?;
+    let _guard = state.list_mutation_lock.lock().await;
+    let token = auth::access_token(&state).await.map_err(to_string)?;
+    let remote = crate::graph::create_task_list(&state.http, &token, name)
+        .await
+        .map_err(to_string)?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    db::upsert_task_list(&conn, &remote.id, &remote.display_name, None).map_err(to_string)?;
+    drop(conn);
+    emit_local_tasks_changed(&app);
+    Ok(TaskListDto {
+        id: remote.id,
+        display_name: remote.display_name,
+        role: None,
+    })
+}
+
+#[tauri::command]
+pub fn set_widget_opacity(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    opacity: f64,
+) -> Result<WidgetInstanceDto, String> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| "database lock poisoned".to_string())?;
+    let instance =
+        widget_config::set_widget_opacity(&conn, &instance_id, opacity).map_err(to_string)?;
+    drop(conn);
+    widget_window::emit_widget_config_changed(&app, &instance_id);
+    Ok(instance)
+}
+
+#[tauri::command]
+pub async fn open_settings_window(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> Result<(), String> {
+    let _guard = state.settings_window_lock.lock().await;
+    {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())?;
+        widget_config::get_widget_instance(&conn, &instance_id).map_err(to_string)?;
+    }
+    if let Some(window) = app.get_webview_window("settings") {
+        window
+            .emit("select-settings-widget", &instance_id)
+            .map_err(to_string)?;
+        window.show().map_err(to_string)?;
+        window.unminimize().map_err(to_string)?;
+        return window.set_focus().map_err(to_string);
+    }
+    let query: String = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("view", "settings")
+        .append_pair("widgetId", &instance_id)
+        .finish();
+    WebviewWindowBuilder::new(
+        &app,
+        "settings",
+        WebviewUrl::App(format!("index.html?{query}").into()),
+    )
+    .title("Todo Desktop Widget · Settings")
+    .inner_size(760.0, 720.0)
+    .min_inner_size(460.0, 480.0)
+    .decorations(true)
+    .transparent(false)
+    .resizable(true)
+    .center()
+    .build()
+    .map_err(to_string)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn close_settings_window(window: WebviewWindow) -> Result<(), String> {
+    if window.label() != "settings" {
+        return Err("not a settings window".to_string());
+    }
+    window.close().map_err(to_string)
+}
+
+#[tauri::command]
 pub fn get_task_lists(state: State<'_, AppState>) -> Result<Vec<TaskListDto>, String> {
     let conn = state
         .db
@@ -393,6 +488,7 @@ pub fn update_settings(
             .sync_coordinator
             .notify_interval_changed(next.sync_interval_minutes);
     }
+    app.emit("settings-changed", &next).map_err(to_string)?;
     Ok(next)
 }
 

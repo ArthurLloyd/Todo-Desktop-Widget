@@ -109,6 +109,8 @@ async fn sync_list_inner(state: &AppState, list_id: &str) -> anyhow::Result<Stri
 }
 
 pub async fn ensure_core_lists(state: &AppState, access_token: &str) -> anyhow::Result<()> {
+    // Do not let an older remote snapshot delete a list being created locally.
+    let _guard = state.list_mutation_lock.lock().await;
     let lists = graph::list_task_lists(&state.http, access_token).await?;
     let remote_lists = lists
         .into_iter()

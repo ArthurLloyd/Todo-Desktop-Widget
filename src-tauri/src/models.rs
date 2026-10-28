@@ -172,6 +172,7 @@ pub struct WidgetThemeConfig {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WidgetInstanceDto {
+    pub opacity: Option<f64>,
     /// Stable identity for persistence; 4B may derive `widget-{id}` labels from it.
     /// The existing primary window remains labeled `main`.
     pub id: String,
