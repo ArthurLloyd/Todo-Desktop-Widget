@@ -2,6 +2,8 @@
 
 把 Microsoft To Do 清单放在 Windows 桌面上的轻量待办组件。支持多个独立浮窗、同一窗口内的多个清单分区、本地离线任务操作，以及统一的设置窗口。
 
+[下载 v0.2.0 Windows 安装包](https://github.com/ArthurLloyd/Todo-Desktop-Widget-Private/releases/tag/v0.2.0)（私有仓库，需要访问权限）。Release 提供 EXE、MSI、SHA-256 校验文件和原位升级说明。
+
 基于 [Chenzo1001/Microsoft-Todo-Desktop-Widget](https://github.com/Chenzo1001/Microsoft-Todo-Desktop-Widget) 改编，改良作者为 **涂风**。这是独立维护的私人项目，并非 Microsoft 官方应用。
 
 ## 0.2.0 更新
@@ -90,7 +92,7 @@ src-tauri/target/release/bundle/nsis/Todo Desktop Widget_0.2.0_x64-setup.exe
 src-tauri/target/release/bundle/msi/Todo Desktop Widget_0.2.0_x64_en-US.msi
 ```
 
-个人安装优先使用 NSIS（当前用户安装范围）。升级前从托盘退出旧版本，再运行安装包。安装包不加入 Git 源码历史；当前构建未签名，Windows 可能显示未知发布者提示。
+个人安装优先使用 NSIS（当前用户安装范围）。升级前从托盘退出旧版本，再运行安装包，沿用原安装包类型及安装目录；如询问旧版处理方式，选择不先卸载、直接升级，不勾选删除应用数据。升级后检查开机启动开关。安装包不加入 Git 源码历史；当前构建未签名，Windows 可能显示未知发布者提示。
 
 本次验证与仍需实机确认的范围见 [0.2.0 验证记录](docs/VALIDATION-0.2.0.md)。朋友电脑的开机启动场景、多显示器与不同 DPI 仍需在对应环境复测。仓库中的旧 RC 报告属于历史记录，不代表当前版本的验收结论。
 
