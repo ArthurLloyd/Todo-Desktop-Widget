@@ -1,6 +1,6 @@
 [package]
 name = "ms-todo-desktop-widget"
-version = "0.2.0"
+version = "0.2.1"
 description = "A lightweight Microsoft To Do desktop widget"
 authors = ["DesktopTodo"]
 edition = "2021"

@@ -53,6 +53,7 @@ let mockSettings: Settings = {
   language: "system",
   fontFamily: "system",
   fontScale: 1,
+  settingsTheme: "follow-window",
 };
 
 async function call<T>(command: string, args?: Record<string, unknown>, fallback?: T): Promise<T> {

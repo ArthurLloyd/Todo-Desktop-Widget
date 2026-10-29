@@ -11,10 +11,11 @@ type Props = {
   onBack?: () => void;
   onClose: () => void;
   toolbar?: ReactNode;
+  hideHeader?: boolean;
   children: ReactNode;
 };
 
-export function ManagementShell({ title, hint, themeStyle, onBack, onClose, toolbar, children }: Props) {
+export function ManagementShell({ title, hint, themeStyle, onBack, onClose, toolbar, hideHeader, children }: Props) {
   const { t } = useI18n();
 
   function handlePointerDown(event: PointerEvent<HTMLElement>) {
@@ -25,8 +26,8 @@ export function ManagementShell({ title, hint, themeStyle, onBack, onClose, tool
   }
 
   return (
-    <section className="management-shell" data-toolbar={toolbar ? "true" : undefined} aria-label={title} style={themeStyle}>
-      <header
+    <section className="management-shell" data-toolbar={toolbar ? "true" : undefined} data-header={hideHeader ? "hidden" : undefined} aria-label={title} style={themeStyle}>
+      {!hideHeader ? <header
         className="management-shell__header"
         data-tauri-drag-region
         onPointerDown={handlePointerDown}
@@ -57,7 +58,7 @@ export function ManagementShell({ title, hint, themeStyle, onBack, onClose, tool
         >
           <X size={16} />
         </button>
-      </header>
+      </header> : null}
       {toolbar ? <div className="management-shell__toolbar">{toolbar}</div> : null}
       <div className="management-shell__body">{children}</div>
     </section>

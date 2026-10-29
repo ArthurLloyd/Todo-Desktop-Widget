@@ -2,13 +2,24 @@
 
 把 Microsoft To Do 清单放在 Windows 桌面上的轻量待办组件。支持多个独立浮窗、同一窗口内的多个清单分区、本地离线任务操作，以及统一的设置窗口。
 
-[下载 v0.2.0 Windows 安装包](https://github.com/ArthurLloyd/Todo-Desktop-Widget-Private/releases/tag/v0.2.0)（私有仓库，需要访问权限）。Release 提供 EXE、MSI、SHA-256 校验文件和原位升级说明。
+[下载 v0.2.1 Windows 安装包](https://github.com/ArthurLloyd/Todo-Desktop-Widget-Private/releases/tag/v0.2.1)（私有仓库，需要访问权限）。Release 提供 EXE、MSI、SHA-256 校验文件和原位升级说明。
 
 基于 [Chenzo1001/Microsoft-Todo-Desktop-Widget](https://github.com/Chenzo1001/Microsoft-Todo-Desktop-Widget) 改编，改良作者为 **涂风**。这是独立维护的私人项目，并非 Microsoft 官方应用。
 
+## 0.2.1 更新
+
+- **四套完整个性化场景**：新增 **邓紫棋 · 紫夜舞台**（紫色舞台）、**封不觉 · 黑色剧场**（黑色剧场）、**ChatGPT · 白色龙娘**（白发龙角龙尾拟人）和 **DeepSeek · 蓝色鲸娘**（蓝发鲸尾女仆拟人）。每套场景独立呈现设置与管理页面，不改变桌面清单的外观与布局。
+- **独立个性化标签页**：设置分为“窗口外观”“个性化”“通用与账户”三个标签页；保留 Default / Ocean / Violet / Forest 四种简约配色与“跟随所选窗口”，主题选择自动保存。
+- **圆角与标题整理**：修复桌面浮窗四角的直角残留，移除重复标题，保留清晰的页面与分组层级。
+- **不透明度直接输入**：保留滑块；双击百分比，或聚焦后按 Enter / Space，可输入 0–100 的整数。Enter 或失焦保存，Esc 取消。
+
+四套背景均为完整横向场景，左右两侧都有环境细节；背景铺满窗口，文字与控件采用局部底色保护可读性，装饰层不接收鼠标事件。ChatGPT 与 DeepSeek 使用社区确认的龙娘、鲸鱼娘形象扩展场景，素材署名与 CC BY-NC-SA 4.0 说明见[主题素材来源](src/assets/themes/NOTICE.md)。
+
+设置预览（示例数据）：[ChatGPT · 白色龙娘](assets/Theme-ChatGPT.jpg) · [DeepSeek · 蓝色鲸娘](assets/Theme-DeepSeek.jpg) · [邓紫棋 · 紫夜舞台](assets/Theme-GEM.jpg) · [封不觉 · 黑色剧场](assets/Theme-Feng.jpg)。验证范围见 [0.2.1 验证记录](docs/VALIDATION-0.2.1.md)。
+
 ## 0.2.0 更新
 
-- **独立设置窗口**：点击任一浮窗的设置按钮即可打开。顶部选择要编辑的窗口，外观与通用设置分开，浮窗保持可见。
+- **独立设置窗口**：点击任一浮窗的设置按钮即可打开，分为“窗口外观”“通用与账户”两个标签页；在“窗口外观”中选择要编辑的窗口，浮窗保持可见。
 - **每个浮窗单独保存不透明度**：调整所选窗口不会改变其他窗口；关闭后重新打开、重启应用仍会保留。复制浮窗时复制其不透明度，之后分别调整。
 - **直接新建 Microsoft To Do 清单**：在浮窗清单下拉框右侧点击“新建清单”，输入名称，点击“创建并使用”。成功后清单保存到 Microsoft 账户并绑定当前分区。
 - **启动边缘修复**：关闭透明无边框浮窗的系统阴影，并在恢复窗口模式后刷新原生边框，处理启动时可能出现的右侧残留边缘。保留拖动、缩放与桌面固定能力。
@@ -28,14 +39,17 @@
 
 | 设置 | 作用范围 | 使用说明 |
 | --- | --- | --- |
-| 背景不透明度 | 当前选择的浮窗 | 0% 更透明，100% 更不透明；不会降低文字的不透明度。主题自身的不透明度也会叠加生效。 |
+| 背景不透明度 | 当前选择的浮窗 | 保留滑块；双击百分比，或聚焦后按 Enter / Space，可输入 0–100 的整数。Enter 或失焦保存，Esc 取消。0% 更透明，100% 更不透明；文字不受影响，主题自身的不透明度叠加生效。 |
 | 固定到桌面 | 当前选择的浮窗 | 按 Win + D 后仍可见，普通应用可以覆盖它；不是覆盖所有应用的“始终置顶”。 |
 | 布局、窗口主题 | 当前选择的浮窗 | 支持单区、列、行、网格。更多分区选项在窗口管理中。 |
 | 分区主题、清单绑定 | 对应分区 | 可覆盖窗口主题；可拖动分隔线调整相邻分区大小。 |
+| 个性化主题 | 设置与管理页面 | 独立保存，可选择简约配色、插画主题或“跟随所选窗口”；不改变桌面清单的外观与布局。 |
 | 语言、字体、文字大小 | 所有窗口 | 支持简体中文、英文及跟随系统语言。 |
 | 同步频率、显示已完成、开机启动 | 所有窗口 | 账户与同步服务共享；分区可单独覆盖“显示已完成”。 |
 
 窗口外观修改自动保存。旧版本的全局不透明度会作为未单独设置窗口的兼容默认值，升级不会统一重置已有外观。设置窗口本身保持实底，便于在低不透明度下操作。
+
+“个性化”提供 Default / Ocean / Violet / Forest 简约配色，以及 **邓紫棋 · 紫夜舞台**、**封不觉 · 黑色剧场**、**ChatGPT · 白色龙娘**、**DeepSeek · 蓝色鲸娘**四套完整场景。主题仅用于设置与管理页面；也可显式选择“跟随所选窗口”，旧配置默认沿用此行为。
 
 ### 同步与离线
 
@@ -74,6 +88,8 @@ cargo fmt --check --manifest-path src-tauri/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
+当前版本的检查结果与实机验证范围见 [0.2.1 验证记录](docs/VALIDATION-0.2.1.md)；[0.2.0 验证记录](docs/VALIDATION-0.2.0.md)保留为历史记录。
+
 核心代码：`src/App.tsx` 负责窗口路由与数据连接，`src/components/` 放置界面组件，`src-tauri/src/widget_config.rs` 管理窗口配置，`desktop_window.rs` 处理桌面层级，`commands.rs` 暴露应用命令，`graph.rs` 与 `sync.rs` 负责远端接口和同步。
 
 ## Windows 打包与升级
@@ -88,13 +104,13 @@ npm run release:windows
 
 ```text
 src-tauri/target/release/ms-todo-desktop-widget.exe
-src-tauri/target/release/bundle/nsis/Todo Desktop Widget_0.2.0_x64-setup.exe
-src-tauri/target/release/bundle/msi/Todo Desktop Widget_0.2.0_x64_en-US.msi
+src-tauri/target/release/bundle/nsis/Todo Desktop Widget_0.2.1_x64-setup.exe
+src-tauri/target/release/bundle/msi/Todo Desktop Widget_0.2.1_x64_en-US.msi
 ```
 
-个人安装优先使用 NSIS（当前用户安装范围）。升级前从托盘退出旧版本，再运行安装包，沿用原安装包类型及安装目录；如询问旧版处理方式，选择不先卸载、直接升级，不勾选删除应用数据。升级后检查开机启动开关。安装包不加入 Git 源码历史；当前构建未签名，Windows 可能显示未知发布者提示。
+个人安装优先使用 NSIS（当前用户安装范围）。0.2.1 沿用 0.2.0 的应用标识与数据目录，原位升级会保留账户、任务与设置。升级前从托盘退出旧版本，再运行安装包，沿用原安装包类型及安装目录；如询问旧版处理方式，选择不先卸载、直接升级，不勾选删除应用数据。升级后检查开机启动开关。安装包不加入 Git 源码历史；当前构建未签名，Windows 可能显示未知发布者提示。
 
-本次验证与仍需实机确认的范围见 [0.2.0 验证记录](docs/VALIDATION-0.2.0.md)。朋友电脑的开机启动场景、多显示器与不同 DPI 仍需在对应环境复测。仓库中的旧 RC 报告属于历史记录，不代表当前版本的验收结论。
+本次验证与仍需实机确认的范围见 [0.2.1 验证记录](docs/VALIDATION-0.2.1.md)。朋友电脑的开机启动场景、多显示器与不同 DPI 仍需在对应环境复测。仓库中的旧 RC 报告属于历史记录，不代表当前版本的验收结论。
 
 ## 数据与隐私
 

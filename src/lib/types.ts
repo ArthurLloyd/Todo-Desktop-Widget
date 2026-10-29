@@ -1,6 +1,7 @@
 export type ListRole = "today" | "inbox" | "this_week";
 export type SortMode = "default" | "due" | "created" | "modified" | "importance" | "title" | "reminder";
 export type LanguageSetting = "system" | "en" | "zh-CN";
+export type SettingsThemeId = "follow-window" | "default" | "ocean" | "violet" | "forest" | "gem" | "feng-bujue" | "chatgpt" | "deepseek";
 
 export type Task = {
   id: string;
@@ -71,6 +72,7 @@ export type Settings = {
   language: LanguageSetting;
   fontFamily: "system" | "compact" | "serif" | "mono";
   fontScale: number;
+  settingsTheme: SettingsThemeId;
 };
 
 export type AppInfo = {

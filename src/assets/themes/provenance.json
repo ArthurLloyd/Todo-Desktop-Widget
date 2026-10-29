@@ -1,0 +1,42 @@
+{
+  "generator": "OpenAI built-in image_gen (generation and reference-guided scene extension)",
+  "generatedOn": "2026-10-29",
+  "usage": "Theme backgrounds. GEM/Feng assets are original generated illustrations; GPT dragon girl and DeepSeek whale girl are community fan art, with sources and CC BY-NC-SA 4.0 attribution in NOTICE.md.",
+  "assets": [
+    {
+      "file": "gem-stage.webp",
+      "prompt": "Edit this purple concert wallpaper to FILL IN THE ENTIRE LEFT HALF with a complete detailed live concert environment, matching the existing luminous violet butterfly, stage and distant singer on the right. Preserve existing butterfly and singer. LEFT SIDE MUST visibly show stage architecture, amethyst spotlights crossing space, a second illuminated crystal stage structure, layered audience silhouettes, curved stage runways, light particles and reflective stage floor continuing fully to the LEFT edge. No blank dark region, no fade into solid color, no reserved text space. Maintain a sophisticated purple palette and cinematic realism; details stay tonal, but visibly complete across all four corners and the whole width. 1536x1024 full landscape illustration. No lettering, logos, UI or watermarks.",
+      "conversion": "Reference-guided AI scene extension across the full landscape canvas. Existing character identity retained; PNG converted to WebP at quality 88.",
+      "originalPrompt": "Create an original wide cinematic background artwork for a PERSONAL desktop app settings theme inspired by G.E.M. 邓紫棋's purple concert energy, not a UI mockup. Landscape 1536x1024 or similarly wide. A luminous purple butterfly made of stage light on the far RIGHT third, below it a small distant female singer silhouette holding a microphone on a concert stage, her face is not visible. Atmospheric violet stage spotlights, silver glints, iridescent amethyst ribbons and deep plum darkness, photographic concert art with elegant restraint. LEFT 65 percent is very dark plum open negative space to hold readable app controls. Strong visual composition on far right, subtle rich texture, refined, immersive, high-end music poster art. No lettering, no logos, no text, no actual album cover, no watermarks. Colors: near-black plum #140f20, amethyst #b493f2, pale lilac. No bright areas on left. Flat edge-to-edge artwork."
+    },
+    {
+      "file": "feng-noir.webp",
+      "prompt": "Edit this noir Feng Bujue suspense wallpaper to FILL IN THE ENTIRE LEFT HALF with a complete detailed abandoned amusement park, matching the existing dark-haired man in a purple coat and cards on the right. Preserve that same man and card design, do not redesign him. LEFT half MUST visibly show a crooked carnival entrance arch, abandoned ticket booth, empty carousel, wrought iron fence, wet cobblestone path, dim silver lamps and distant park architecture, all continuing fully to the LEFT edge. No blank black region, no fade into solid color, no reserved text space. Maintain readable detailed charcoal, muted silver and restrained plum, atmospheric fog but not fog hiding all scenery. No gore. 1536x1024 complete cinematic landscape. No lettering, logos, UI or watermarks.",
+      "conversion": "Reference-guided AI scene extension across the full landscape canvas. Existing character identity retained; PNG converted to WebP at quality 88.",
+      "originalPrompt": "Create an original wide cinematic illustration background for a personal desktop app settings theme inspired by Feng Bujue 封不觉 from the Chinese suspense novel Thriller Paradise 惊悚乐园. Not a UI mockup. Landscape 1536x1024 or similarly wide. A mysterious black-haired young East Asian detective-like man with a knowing subtle smile, wearing a dark purple long coat, very small and confined to the far RIGHT edge in three-quarter back profile; a few worn joker playing cards drift near his hand; a deserted amusement park ferris wheel barely visible in black fog behind him. Sophisticated noir, charcoal black ink, desaturated silver and restrained plum, a single small dim crimson carnival light, psychological mystery rather than gore. LEFT 65 percent almost black, quiet negative space to hold readable controls. Artwork is an atmospheric illustration, detailed brushwork only on right. No lettering, no logos, no text, no watermarks, no blood, no UI. Colors #101113, #242529, antique silver #c9c3b8 and faint muted purple. Edge-to-edge artwork."
+    },
+    {
+      "file": "chatgpt-dragon.webp",
+      "source": "https://raw.githubusercontent.com/Apprentice-Geo/AI-Fanworks/main/ApprenTice/AI-Girls-and-Chibis/ChatGPT-Chibi.png",
+      "authors": [
+        "ApprenTice",
+        "ZipZipPipe"
+      ],
+      "license": "CC BY-NC-SA 4.0",
+      "conversion": "Reference-guided AI scene extension across the full landscape canvas. Existing character identity retained; PNG converted to WebP at quality 88.",
+      "prompt": "Edit and outpaint this exact reference illustration into a COMPLETE landscape wallpaper, 1536x1024 wide. Preserve the recognizable GPT dragon girl exactly: same face, white/silver long hair, purple eyes, white dragon horns, pointed ears, little white dragon wings, scaled white tail, white flowing dress and silver ornaments. Keep her pose and outfit faithful to the reference, not a new mascot, no furry creature. Place her in the RIGHT third with her head and dragon horns fully visible. Extend a detailed luminous WHITE celestial library and garden across the ENTIRE image including the LEFT side: pearly stone archways, elegant shelves of books, flowing white curtains, silver hanging stars, pale lavender flowers, distant windows and soft sunlight. The LEFT half MUST have real visible scene detail from edge to edge, as rich as the right environment, with no blank, empty, solid-color, faded or featureless region. Keep scene consistently bright white/ivory with lavender accents. Calm anime illustration matching reference linework and coloring. A complete coherent panoramic environment. No UI, no letters, no watermark, no panel split, no mockup. This is a full-window desktop wallpaper; no reserved text area."
+    },
+    {
+      "file": "deepseek-girl.webp",
+      "source": "https://raw.githubusercontent.com/Apprentice-Geo/AI-Fanworks/main/ApprenTice/AI-Girls-and-Chibis/DeepSeek-Chibi.png",
+      "authors": [
+        "ApprenTice",
+        "ZipZipPipe",
+        "上善无形"
+      ],
+      "license": "CC BY-NC-SA 4.0",
+      "conversion": "Reference-guided AI scene extension across the full landscape canvas. Existing character identity retained; PNG converted to WebP at quality 88.",
+      "prompt": "Edit and outpaint this exact reference illustration into a COMPLETE landscape wallpaper, 1536x1024 wide. Preserve the recognizable DeepSeek whale GIRL exactly: same blue eyes, long dark-to-light-blue hair, curved hair tuft, fin-like ears, giant blue whale tail, navy and white frilled maid outfit, white apron with the blue whale emblem, dark blue shoes. Keep the character's face, pose, costume and chibi proportions faithful to this reference, not a new whale animal or different girl. Put her in the RIGHT third, entire head and tail visible. Extend a rich fantasy BLUE underwater library/cafe across the ENTIRE width including the LEFT edge: blue arched windows into the ocean, shelves of books, a small study table, coral and sea plants, soft bubbles, shafts of blue daylight, elegant underwater architecture. LEFT half MUST have real visible illustrated scenery as rich as the right environment, no blank, empty, solid navy, fade-to-color, featureless region or reserved text space. Palette sapphire, azure, dark marine blue and icy highlights, matching anime linework and coloring. Complete coherent panoramic scene, not a portrait on a plain background. No UI, no letters, no watermark, no split panel."
+    }
+  ]
+}

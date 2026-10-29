@@ -14,6 +14,7 @@ import type {
 import { ManagementShell } from "./ManagementShell";
 import { OpacityControl } from "./OpacityControl";
 import { InlineError } from "./InlineError";
+import { SettingsThemePicker } from "./SettingsThemePicker";
 
 const UPSTREAM_PROJECT_URL = "https://github.com/Chenzo1001/Microsoft-Todo-Desktop-Widget";
 const IMPROVEMENT_AUTHOR = "涂风";
@@ -51,7 +52,8 @@ export function SettingsPanel({
   onChangeWidgetTheme, onOpenWidgetManager, onOpenThemeManager,
 }: Props) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<"window" | "general">("window");
+  const [tab, setTab] = useState<"window" | "personalization" | "general">("window");
+  const [themeBusy, setThemeBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [autostartBusy, setAutostartBusy] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
@@ -61,24 +63,28 @@ export function SettingsPanel({
   async function save(patch: Partial<Settings>) {
     setSaveError(null);
     if (patch.autostart !== undefined) setAutostartBusy(true);
+    if (patch.settingsTheme !== undefined) setThemeBusy(true);
     try { await onChange(patch); }
     catch (error) { setSaveError(String(error)); }
-    finally { setAutostartBusy(false); }
+    finally { setAutostartBusy(false); setThemeBusy(false); }
   }
 
   const tabs = <nav className="preferences-tabs" role="tablist" aria-label={t("settings.title")}
     onKeyDown={(event) => {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
       event.preventDefault();
-      const next = event.key === "Home" ? "window" : event.key === "End" ? "general" : tab === "window" ? "general" : "window";
+      const order = ["window", "personalization", "general"] as const;
+      const next = event.key === "Home" ? order[0] : event.key === "End" ? order[2]
+        : order[(order.indexOf(tab) + (event.key === "ArrowRight" ? 1 : 2)) % order.length];
       setTab(next);
       event.currentTarget.querySelector<HTMLButtonElement>(`#settings-tab-${next}`)?.focus();
     }}>
     <button type="button" role="tab" id="settings-tab-window" aria-controls="settings-content" aria-selected={tab === "window"} tabIndex={tab === "window" ? 0 : -1} onClick={() => setTab("window")}><LayoutDashboard size={17} />{t("settings.windowTab")}</button>
+    <button type="button" role="tab" id="settings-tab-personalization" aria-controls="settings-content" aria-selected={tab === "personalization"} tabIndex={tab === "personalization" ? 0 : -1} onClick={() => setTab("personalization")}><Palette size={17} />{t("settings.personalizationTab")}</button>
     <button type="button" role="tab" id="settings-tab-general" aria-controls="settings-content" aria-selected={tab === "general"} tabIndex={tab === "general" ? 0 : -1} onClick={() => setTab("general")}><UserCircle size={17} />{t("settings.generalTab")}</button>
   </nav>;
 
-  return <ManagementShell title={t("settings.title")} themeStyle={managementThemeStyle} onClose={onClose} toolbar={tabs}>
+  return <ManagementShell title={t("settings.title")} themeStyle={managementThemeStyle} onClose={onClose} toolbar={tabs} hideHeader>
     <div ref={panel} className="preferences-panel" id="settings-content" role="tabpanel" aria-labelledby={`settings-tab-${tab}`}>
       {configError ? <InlineError message={localizeBackendMessage(configError, t)} /> : null}
       {saveError ? <InlineError message={saveError} /> : null}
@@ -115,7 +121,8 @@ export function SettingsPanel({
             <div className="preferences-actions"><button className="secondary-button" onClick={onOpenWidgetManager}><LayoutDashboard size={16} />{t("widgetManager.manageDesktopWidgets")}</button></div>
           </section>
         </> : null}
-      </> : <>
+      </> : tab === "personalization" ? <SettingsThemePicker value={settings.settingsTheme} themes={widgetThemes} disabled={themeBusy}
+        onChange={(settingsTheme) => void save({ settingsTheme })} /> : <>
         <section className="preferences-account" aria-label={t("settings.accountHeading")}>
           <UserCircle size={28} aria-hidden="true" />
           <div><strong>{auth.loggedIn ? auth.account || t("settings.msConnected") : t("settings.notSignedIn")}</strong><p>{loginNotice ? localizeBackendMessage(loginNotice, t) : auth.loggedIn ? t("settings.connectedHint") : t("settings.signedOutHint")}</p></div>

@@ -40,7 +40,7 @@ import {
   resolveWidgetTheme,
   themeToCssVariables,
 } from "./lib/themeRuntime";
-import { deriveManagementTheme } from "./lib/managementTheme";
+import { deriveSettingsTheme } from "./lib/settingsThemes";
 import { reduceWidgetView } from "./lib/widgetView";
 import { classifyStartupPresentation } from "./lib/widgetPresentation";
 import { FirstRunState, WidgetLoadError, WidgetLoadingState } from "./components/WidgetStartupState";
@@ -56,6 +56,7 @@ const defaultSettings: Settings = {
   language: "system",
   fontFamily: "system",
   fontScale: 1,
+  settingsTheme: "follow-window",
 };
 
 export default function App() {
@@ -125,8 +126,8 @@ function WidgetApp({ management = false }: { management?: boolean }) {
     [windowOpacity, widgetTheme],
   );
   const managementThemeStyle = useMemo(
-    () => deriveManagementTheme(widgetTheme?.config),
-    [widgetTheme],
+    () => deriveSettingsTheme(settings.settingsTheme, widgetThemes, widgetTheme?.config),
+    [settings.settingsTheme, widgetThemes, widgetTheme],
   );
   const startupPresentation = classifyStartupPresentation({
     loading: initialLoading,
@@ -451,6 +452,7 @@ function WidgetApp({ management = false }: { management?: boolean }) {
     <I18nProvider language={settings.language}>
       <WidgetShell
         management={management}
+        settingsTheme={settings.settingsTheme}
         opacity={windowOpacity}
         fontFamily={settings.fontFamily}
         fontScale={settings.fontScale}

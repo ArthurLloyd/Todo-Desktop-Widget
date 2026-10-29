@@ -45,16 +45,29 @@ pub fn apply_patch(mut settings: SettingsDto, patch: SettingsPatch) -> SettingsD
         settings.font_scale = value.clamp(0.9, 1.2);
     }
 
+    if let Some(value) = patch.settings_theme {
+        settings.settings_theme = sanitize_theme(value);
+    }
+
     settings
 }
 
 pub fn sanitize(mut settings: SettingsDto) -> SettingsDto {
+    settings.settings_theme = sanitize_theme(settings.settings_theme);
     settings.opacity = if settings.opacity.is_finite() {
         settings.opacity.clamp(0.0, 1.0)
     } else {
         SettingsDto::default().opacity
     };
     settings
+}
+
+fn sanitize_theme(value: String) -> String {
+    match value.as_str() {
+        "default" | "ocean" | "violet" | "forest" | "gem" | "feng-bujue" | "chatgpt"
+        | "deepseek" => value,
+        _ => "follow-window".to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -72,6 +85,33 @@ mod tests {
             language: None,
             font_family: None,
             font_scale: None,
+            settings_theme: None,
+        }
+    }
+
+    #[test]
+    fn settings_theme_is_persisted_independently_and_old_settings_migrate() {
+        let old: SettingsDto = serde_json::from_str(r#"{"opacity":0.55}"#).unwrap();
+        assert_eq!(old.settings_theme, "follow-window");
+        let mut patch = opacity_patch(0.55);
+        patch.settings_theme = Some("gem".to_string());
+        let updated = apply_patch(old, patch);
+        let restored: SettingsDto =
+            serde_json::from_str(&serde_json::to_string(&updated).unwrap()).unwrap();
+        assert_eq!(restored.settings_theme, "gem");
+        assert_eq!(restored.opacity, 0.55);
+        assert_eq!(sanitize_theme("missing-theme".to_string()), "follow-window");
+    }
+
+    #[test]
+    fn all_character_themes_survive_save_and_reload() {
+        for theme in ["gem", "feng-bujue", "chatgpt", "deepseek"] {
+            let mut patch = opacity_patch(0.55);
+            patch.settings_theme = Some(theme.to_string());
+            let updated = apply_patch(SettingsDto::default(), patch);
+            let restored: SettingsDto =
+                serde_json::from_str(&serde_json::to_string(&updated).unwrap()).unwrap();
+            assert_eq!(sanitize(restored).settings_theme, theme);
         }
     }
 

@@ -90,6 +90,15 @@ button {
   font-size: calc(14px * var(--font-scale, 1));
 }
 
+/* Clip the compositor as well as children: a full-viewport shadow/backdrop
+   otherwise leaves rectangular pixels outside the translucent rounded edge. */
+.widget-shell:not(.settings-window) {
+  isolation: isolate;
+  overflow: hidden;
+  clip-path: inset(0 round var(--widget-border-radius));
+  box-shadow: none;
+}
+
 .widget-shell[data-font="compact"],
 .details-window[data-font="compact"] {
   font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", Arial, sans-serif;
@@ -2386,12 +2395,14 @@ button {
 }
 .settings-window .management-shell, .settings-window .management-shell__header { border-radius: 0; }
 .settings-window .management-shell { border: 0; }
+.management-shell[data-header="hidden"][data-toolbar="true"] { grid-template-rows: auto minmax(0, 1fr); }
 .settings-window .management-shell__header { padding: 16px 28px; min-height: 68px; }
 .settings-window .management-shell__navigation strong { font-size: calc(20px * var(--font-scale, 1)); font-weight: 650; }
 .management-shell[data-toolbar="true"] { grid-template-rows: auto auto minmax(0, 1fr); }
 .management-shell__toolbar { padding: 0 28px; border-bottom: 1px solid var(--border); background: var(--management-bg); }
 .settings-window .management-shell__body { padding: 24px 28px 32px; }
 .preferences-tabs { display: flex; gap: 24px; }
+.management-shell__toolbar { min-width: 0; }
 .preferences-tabs button { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 2px; border-bottom: 2px solid transparent; color: var(--text-muted); background: transparent; font-size: var(--settings-body); cursor: pointer; transition: color 150ms ease, border-color 150ms ease; }
 .preferences-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 650; }
 .preferences-tabs button:hover { color: var(--text); }
@@ -2423,8 +2434,13 @@ button {
 .preferences-about a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
 .opacity-control { display: grid; gap: 4px; min-width: 0; padding: 10px 0 4px; }
 .opacity-control__field { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; width: 100%; }
-.opacity-control__field > span { display: flex; justify-content: space-between; gap: 12px; color: var(--text); font-size: var(--settings-body); }
-.opacity-control output { font-weight: 650; font-variant-numeric: tabular-nums; }
+.opacity-control__heading { display: flex; align-items: center; justify-content: space-between; min-height: 30px; gap: 12px; color: var(--text); font-size: var(--settings-body); }
+.opacity-control__value { min-width: 58px; height: 30px; padding: 3px 7px; color: var(--text); border: 1px solid transparent; border-radius: 6px; background: transparent; font-weight: 650; font-variant-numeric: tabular-nums; cursor: text; }
+.opacity-control__value:hover { background: var(--management-surface-elevated); border-color: var(--border); }
+.opacity-control__editor { display: flex; align-items: center; gap: 3px; height: 30px; color: var(--text); font-variant-numeric: tabular-nums; }
+.opacity-control__editor input { width: 55px; height: 30px; padding: 3px 6px; border: 1px solid var(--accent); border-radius: 5px; color: var(--text); background: var(--management-surface-elevated); text-align: right; }
+.opacity-control__editor input[aria-invalid="true"] { border-color: var(--danger); }
+.opacity-control__error { margin: 4px 0 0; color: var(--danger); font-size: var(--settings-help); }
 .opacity-control__scale { display: flex; justify-content: space-between; font-size: var(--settings-help); color: var(--text-muted); }
 .settings-save-status { display: block; font-size: var(--settings-help); color: var(--text-muted); }
 .settings-window .widget-manager-field, .settings-window .widget-pane-editor label,
@@ -2471,4 +2487,155 @@ button:disabled, input:disabled { cursor: not-allowed; opacity: .5; }
 }
 @media (prefers-reduced-transparency: reduce) {
   .widget-shell { background: var(--management-bg); backdrop-filter: none; }
+}
+
+/* Settings-only scenes. Artwork is below all controls and cannot take input. */
+.settings-window[data-settings-theme="chatgpt"] {
+  --settings-artwork: url("./assets/themes/chatgpt-dragon.webp");
+  --settings-scene-bg: #faf8fc;
+  --settings-panel-bg: rgba(253, 251, 255, .8);
+  --settings-control-radius: 12px;
+  --settings-accent-ink: #fff;
+  --settings-color-scheme: light;
+}
+.settings-window[data-settings-theme="deepseek"] {
+  --settings-artwork: url("./assets/themes/deepseek-girl.webp");
+  --settings-scene-bg: #0b1735;
+  --settings-panel-bg: rgba(11, 25, 55, .8);
+  --settings-control-radius: 10px;
+  --settings-accent-ink: #102247;
+}
+.settings-window[data-settings-theme="gem"] {
+  --settings-artwork: url("./assets/themes/gem-stage.webp");
+  --settings-scene-bg: #140f20;
+  --settings-panel-bg: rgba(25, 18, 36, .85);
+  --settings-control-radius: 10px;
+  --settings-accent-ink: #281635;
+}
+.settings-window[data-settings-theme="feng-bujue"] {
+  --settings-artwork: url("./assets/themes/feng-noir.webp");
+  --settings-scene-bg: #101113;
+  --settings-panel-bg: rgba(19, 20, 23, .88);
+  --settings-control-radius: 4px;
+  --settings-accent-ink: #201e26;
+}
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) .management-shell {
+  background: var(--settings-scene-bg);
+  color-scheme: var(--settings-color-scheme, dark);
+}
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) .management-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--settings-artwork);
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: 65% center;
+  pointer-events: none;
+}
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) .management-shell__toolbar {
+  position: relative;
+  z-index: 1;
+  background: var(--settings-panel-bg);
+}
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) .management-shell__header {
+  background: var(--settings-panel-bg);
+}
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) .preferences-group {
+  padding: 20px;
+  background: var(--settings-panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--settings-control-radius);
+}
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) .preferences-group h2 {
+  color: var(--text);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) :is(.preferences-panel > .preferences-field, .preferences-account) { padding: 14px 18px; border-radius: var(--settings-control-radius); background: var(--settings-panel-bg); }
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) :is(select, .secondary-button, .opacity-control__value, .opacity-control__editor input) {
+  border-radius: var(--settings-control-radius);
+}
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) .preferences-tabs button[aria-selected="true"] {
+  color: var(--accent);
+}
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) .preferences-panel input[type="checkbox"]:checked::before {
+  background: var(--settings-accent-ink);
+}
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) .preferences-panel :is(select, .secondary-button):hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--management-surface-elevated) 90%, var(--accent));
+}
+.settings-window[data-settings-theme="feng-bujue"] .preferences-tabs button[aria-selected="true"] {
+  border-bottom-style: double;
+  border-bottom-width: 3px;
+}
+.settings-personalization { min-width: 0; }
+.settings-personalization__intro h2 { margin: 0; font-size: calc(22px * var(--font-scale, 1)); line-height: 1.45; font-weight: 650; }
+.settings-personalization__intro p { max-width: 56ch; margin: 8px 0 26px; color: var(--text-muted); font-size: var(--settings-help); line-height: 1.7; }
+.settings-window:is([data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) .settings-personalization__intro { padding: 14px 16px; margin-bottom: 16px; border-radius: var(--settings-control-radius); background: var(--settings-panel-bg); }
+.settings-window:is([data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) .settings-personalization__intro p { margin-bottom: 0; }
+.settings-theme-choices { min-width: 0; margin: 0; padding: 0; border: 0; }
+.settings-theme-choices legend, .settings-theme-choices__heading { margin: 0 0 12px; padding: 0; color: var(--text); font-size: var(--settings-body); font-weight: 650; }
+.settings-theme-choices__heading { margin-top: 26px; }
+.settings-theme-featured { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.settings-theme-card { position: relative; display: grid; min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--management-surface); cursor: pointer; transition: border-color 140ms ease; }
+.settings-theme-card:hover { border-color: var(--text-muted); }
+.settings-theme-card:has(input:checked) { border-color: var(--accent); outline: 1px solid var(--accent); }
+.settings-theme-card:has(:focus-visible), .settings-theme-swatch:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 4px; }
+.settings-theme-card > input, .settings-theme-swatch > input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; clip-path: inset(50%); }
+.settings-theme-card__art { position: relative; display: block; height: 162px; background-size: cover; background-position: right center; }
+.settings-theme-card__art::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(10, 7, 16, .25), transparent 80%); pointer-events: none; }
+.settings-theme-card__signature { position: absolute; left: 18px; bottom: 18px; color: #f5ebff; font-size: 29px; font-weight: 700; letter-spacing: -.025em; }
+.settings-theme-card[data-choice="feng-bujue"] .settings-theme-card__signature { font-family: "Songti SC", "SimSun", serif; font-weight: 400; color: #f1ede7; }
+.settings-theme-card[data-choice="chatgpt"] .settings-theme-card__signature { color: #30263d; }
+.settings-theme-card[data-choice="deepseek"] .settings-theme-card__signature { color: #e2efff; }
+.settings-theme-card:is([data-choice="chatgpt"], [data-choice="deepseek"]) .settings-theme-card__art { background-position: 65% center; }
+.settings-theme-card[data-choice="chatgpt"] .settings-theme-card__art { background-color: #faf8fc; }
+.settings-theme-card[data-choice="deepseek"] .settings-theme-card__art { background-color: #0b1735; }
+.settings-theme-card[data-choice="chatgpt"] .settings-theme-card__art::before,
+.settings-theme-card[data-choice="deepseek"] .settings-theme-card__art::before { display: none; }
+.settings-theme-card[data-choice="chatgpt"] .settings-theme-card__signature { padding: 2px 7px; border-radius: 6px; background: rgba(250, 248, 252, .88); }
+.settings-theme-card[data-choice="deepseek"] .settings-theme-card__signature { padding: 2px 7px; border-radius: 6px; background: rgba(11, 23, 53, .88); }
+.settings-theme-card__mark { position: absolute; top: 12px; left: 14px; display: grid; place-items: center; width: 25px; height: 25px; color: #241832; background: #c6a1ff; border-radius: 50%; opacity: 0; }
+.settings-theme-card:has(input:checked) .settings-theme-card__mark { opacity: 1; }
+.settings-theme-card[data-choice="feng-bujue"] .settings-theme-card__mark { background: #cec4e0; border-radius: 4px; }
+.settings-theme-card[data-choice="chatgpt"] .settings-theme-card__mark { color: #fff; background: #785495; }
+.settings-theme-card[data-choice="deepseek"] .settings-theme-card__mark { color: #102247; background: #a6c4ff; }
+.settings-theme-card__copy { display: grid; align-content: start; gap: 6px; padding: 15px 16px 17px; border-top: 1px solid var(--border); }
+.settings-theme-card__copy strong { color: var(--text); font-size: var(--settings-body); font-weight: 650; }
+.settings-theme-card__copy small { color: var(--text-muted); font-size: var(--settings-help); line-height: 1.6; }
+.settings-theme-simple { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.settings-theme-swatch { position: relative; display: grid; gap: 9px; min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--management-surface); cursor: pointer; color: var(--text); font-size: var(--settings-help); }
+.settings-theme-swatch:hover { border-color: var(--text-muted); }
+.settings-theme-swatch:has(input:checked) { border-color: var(--accent); outline: 1px solid var(--accent); }
+.settings-theme-swatch__sample { display: grid; gap: 5px; height: 48px; padding: 10px 12px; background: var(--choice-bg); border-radius: 4px; }
+.settings-theme-swatch__sample span { display: block; width: 70%; height: 3px; background: var(--choice-accent); border-radius: 2px; }
+.settings-theme-swatch__sample span:nth-child(2) { width: 50%; opacity: .6; }
+.settings-theme-swatch__sample span:nth-child(3) { width: 60%; opacity: .4; }
+.settings-theme-swatch__check { position: absolute; right: 8px; bottom: 12px; opacity: 0; color: var(--accent); }
+.settings-theme-swatch:has(input:checked) .settings-theme-swatch__check { opacity: 1; }
+.settings-theme-follow { display: flex; align-items: flex-start; gap: 10px; padding-top: 22px; cursor: pointer; }
+.settings-theme-follow input { width: 17px; height: 17px; flex-shrink: 0; margin: 3px 0 0; accent-color: var(--accent); }
+.settings-theme-follow > span { display: grid; gap: 3px; }
+.settings-theme-follow strong { color: var(--text); font-size: var(--settings-body); font-weight: 500; }
+.settings-theme-follow small { color: var(--text-muted); font-size: var(--settings-help); line-height: 1.6; }
+.settings-theme-choices:disabled label { cursor: wait; opacity: .65; }
+.settings-theme-save { margin: 20px 0 0; color: var(--text-muted); font-size: var(--settings-help); }
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) :is(.settings-theme-choices legend, .settings-theme-choices__heading, .settings-theme-follow, .settings-theme-save, .preferences-panel > .preferences-help) { padding: 8px 10px; border-radius: var(--settings-control-radius); background: var(--settings-panel-bg); }
+.settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) :is(.settings-theme-choices__heading, .settings-theme-save) { width: fit-content; }
+@media (max-width: 520px) {
+  .settings-theme-featured { gap: 12px; }
+  .settings-theme-card__art { height: 135px; }
+  .settings-theme-card__signature { font-size: 25px; left: 12px; }
+  .settings-theme-card__copy { padding: 12px; }
+  .settings-theme-simple { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-window:is([data-settings-theme="gem"], [data-settings-theme="feng-bujue"], [data-settings-theme="chatgpt"], [data-settings-theme="deepseek"]) .preferences-group { padding: 14px; }
+  .preferences-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .preferences-tabs button { justify-content: center; min-width: 0; gap: 6px; padding: 8px 2px; white-space: normal; line-height: 1.35; text-align: center; }
+  .preferences-tabs button svg { flex-shrink: 0; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .settings-window .management-shell::before { display: none; }
 }

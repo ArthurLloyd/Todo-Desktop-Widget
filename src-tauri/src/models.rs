@@ -89,6 +89,7 @@ pub struct SettingsDto {
     pub language: String,
     pub font_family: String,
     pub font_scale: f64,
+    pub settings_theme: String,
 }
 
 impl Default for SettingsDto {
@@ -103,6 +104,7 @@ impl Default for SettingsDto {
             language: "system".to_string(),
             font_family: "system".to_string(),
             font_scale: 1.0,
+            settings_theme: "follow-window".to_string(),
         }
     }
 }
@@ -119,6 +121,7 @@ pub struct SettingsPatch {
     pub language: Option<String>,
     pub font_family: Option<String>,
     pub font_scale: Option<f64>,
+    pub settings_theme: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
