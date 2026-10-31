@@ -1,5 +1,7 @@
 # Todo Desktop Widget
 
+**简体中文** | [English](README.en.md)
+
 把 Microsoft To Do 清单放在 Windows 桌面上的轻量待办组件。支持多个独立浮窗、同一窗口内的多个清单分区、本地离线任务操作，以及统一的设置窗口。
 
 [下载 Windows 安装包](https://github.com/ArthurLloyd/Todo-Desktop-Widget/releases/latest) · [版本记录](https://github.com/ArthurLloyd/Todo-Desktop-Widget/releases) · [反馈问题](https://github.com/ArthurLloyd/Todo-Desktop-Widget/issues)
