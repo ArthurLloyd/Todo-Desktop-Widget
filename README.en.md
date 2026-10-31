@@ -19,7 +19,23 @@ Adapted from [Chenzo1001/Microsoft-Todo-Desktop-Widget](https://github.com/Chenz
 
 ## Screenshots
 
-These screenshots show the **settings interface in this project's customized v0.2.1 release**, using sample data. The four personalization scenes apply independently to settings and management pages; desktop lists retain their own themes and layouts.
+These screenshots show **this project's customized v0.2.1 interface**, using sample data. The main view and task details are rendered directly from the current frontend components; see the [screenshot notes](assets/screenshots/README.md) for their source.
+
+### Desktop main view
+
+Two list panes with independent list selectors, new-list buttons, and completed tasks:
+
+![Customized desktop main view with two list panes and sample data](assets/screenshots/v0.2.1-main-en.jpg)
+
+### Task details
+
+Task title, importance, due date, reminders, recurrence, and notes:
+
+![Customized task details with sample data](assets/screenshots/v0.2.1-details-en.jpg)
+
+### Personalization settings
+
+The four personalization scenes apply independently to settings and management pages; desktop lists retain their own themes and layouts.
 
 | ChatGPT · White dragon girl | DeepSeek · Blue whale girl |
 | --- | --- |
