@@ -19,14 +19,7 @@ Adapted from [Chenzo1001/Microsoft-Todo-Desktop-Widget](https://github.com/Chenz
 
 ## Screenshots
 
-![Desktop task list](assets/Main.jpg)
-
-<details>
-<summary>View settings, task details, and personalization themes</summary>
-
-| Settings | Task details |
-| --- | --- |
-| ![Settings window](assets/Settings.jpg) | ![Task details](assets/Details.jpg) |
+These screenshots show the **settings interface in this project's customized v0.2.1 release**, using sample data. The four personalization scenes apply independently to settings and management pages; desktop lists retain their own themes and layouts.
 
 | ChatGPT · White dragon girl | DeepSeek · Blue whale girl |
 | --- | --- |
@@ -35,8 +28,6 @@ Adapted from [Chenzo1001/Microsoft-Todo-Desktop-Widget](https://github.com/Chenz
 | G.E.M. · Violet stage | Feng Bujue · Noir theater |
 | --- | --- |
 | ![G.E.M. settings theme with sample data](assets/Theme-GEM.jpg) | ![Feng Bujue settings theme with sample data](assets/Theme-Feng.jpg) |
-
-</details>
 
 ## Download and installation
 
