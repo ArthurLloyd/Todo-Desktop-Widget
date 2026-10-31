@@ -1,10 +1,52 @@
-# Todo Desktop Widget · 涂风改良版
+# Todo Desktop Widget
 
 把 Microsoft To Do 清单放在 Windows 桌面上的轻量待办组件。支持多个独立浮窗、同一窗口内的多个清单分区、本地离线任务操作，以及统一的设置窗口。
 
-[下载 v0.2.1 Windows 安装包](https://github.com/ArthurLloyd/Todo-Desktop-Widget-Private/releases/tag/v0.2.1)（私有仓库，需要访问权限）。Release 提供 EXE、MSI、SHA-256 校验文件和原位升级说明。
+[下载 Windows 安装包](https://github.com/ArthurLloyd/Todo-Desktop-Widget/releases/latest) · [版本记录](https://github.com/ArthurLloyd/Todo-Desktop-Widget/releases) · [反馈问题](https://github.com/ArthurLloyd/Todo-Desktop-Widget/issues)
 
-基于 [Chenzo1001/Microsoft-Todo-Desktop-Widget](https://github.com/Chenzo1001/Microsoft-Todo-Desktop-Widget) 改编，改良作者为 **涂风**。这是独立维护的私人项目，并非 Microsoft 官方应用。
+基于 [Chenzo1001/Microsoft-Todo-Desktop-Widget](https://github.com/Chenzo1001/Microsoft-Todo-Desktop-Widget) 改编，由 **涂风** 独立维护，非 Microsoft 官方应用。
+
+## 主要功能
+
+- **Microsoft To Do 同步**：登录 Microsoft 账户，查看、创建清单，管理任务的日期、提醒、重要性与备注。
+- **多个桌面浮窗**：独立创建、复制和管理浮窗，每个浮窗可显示多个清单分区。
+- **灵活布局**：支持单区、列、行、网格布局，拖动分隔线调整分区大小。
+- **离线任务操作**：新增、修改、完成和删除先保存到本地，恢复联网后继续同步。
+- **独立外观设置**：浮窗分别保存主题与背景不透明度；设置与管理页面另有四种简约配色和四套插画场景。
+- **Windows 桌面集成**：固定到桌面、系统托盘、开机启动，以及 `Ctrl + Alt + T` 快捷添加。
+
+## 界面预览
+
+![桌面待办清单](assets/Main.jpg)
+
+<details>
+<summary>查看设置、任务详情与个性化主题</summary>
+
+| 设置 | 任务详情 |
+| --- | --- |
+| ![设置窗口](assets/Settings.jpg) | ![任务详情](assets/Details.jpg) |
+
+| ChatGPT · 白色龙娘 | DeepSeek · 蓝色鲸娘 |
+| --- | --- |
+| ![ChatGPT 主题设置预览（示例数据）](assets/Theme-ChatGPT.jpg) | ![DeepSeek 主题设置预览（示例数据）](assets/Theme-DeepSeek.jpg) |
+
+| 邓紫棋 · 紫夜舞台 | 封不觉 · 黑色剧场 |
+| --- | --- |
+| ![邓紫棋主题设置预览（示例数据）](assets/Theme-GEM.jpg) | ![封不觉主题设置预览（示例数据）](assets/Theme-Feng.jpg) |
+
+</details>
+
+## 下载与安装
+
+当前版本为 **v0.2.1**，提供 **Windows x64** 安装包。在 [Releases](https://github.com/ArthurLloyd/Todo-Desktop-Widget/releases/latest) 中选择：
+
+| 文件 | 用途 |
+| --- | --- |
+| `Todo.Desktop.Widget_0.2.1_x64-setup.exe` | 推荐的当前用户安装包（NSIS） |
+| `Todo.Desktop.Widget_0.2.1_x64_en-US.msi` | 适合已有 MSI 安装的环境 |
+| `SHA256SUMS.txt` | 安装包 SHA-256 校验值 |
+
+下载安装包后运行，启动应用并按下方步骤登录。安装包未进行代码签名，Windows 可能显示未知发布者提示。已有版本请沿用原安装包类型与安装目录，具体见[Windows 打包与升级](#windows-打包与升级)。macOS 源码与 WidgetKit 扩展保留在仓库中，尚无经过本项目验收的 macOS 安装包。
 
 ## 0.2.1 更新
 
@@ -63,9 +105,11 @@
 
 技术栈：Tauri v2、Rust、React、TypeScript、Vite、SQLite、Microsoft Graph。
 
-需要 Node.js、Rust、Windows C++ 构建工具及 WebView2。安装前端依赖：
+需要 Node.js 22.12+、Rust、Windows C++ 构建工具及 WebView2；前端测试使用 Node.js 的 `--experimental-strip-types` 选项。克隆当前默认分支并安装前端依赖：
 
 ```powershell
+git clone --branch my-widget https://github.com/ArthurLloyd/Todo-Desktop-Widget.git
+cd Todo-Desktop-Widget
 npm ci
 ```
 
@@ -130,6 +174,6 @@ Refresh Token 优先存入 Windows Credential Manager，兼容路径可能在 SQ
 
 - 上游：[Chenzo1001/Microsoft-Todo-Desktop-Widget](https://github.com/Chenzo1001/Microsoft-Todo-Desktop-Widget)
 - 改良作者：**涂风**
-- 仓库保持 PRIVATE；上游公开再分发许可尚未明确，私人归档不代表取得公开分发授权。
+- 当前仓库未附代码 `LICENSE` 文件；保留上游来源与作者署名。主题素材的来源、署名及许可单独记录在[主题素材说明](src/assets/themes/NOTICE.md)，不代表仓库其他代码或素材采用相同许可。
 - 界面参考：[Uiverse](https://uiverse.io/)、[React Bits](https://www.reactbits.dev/)、[Mobbin](https://mobbin.com/)、[VibeHub](https://vibe-hub.org/)。本次采用控件状态、分组与轻量反馈思路，沿用项目 React/CSS 和 Lucide 图标，未引入这些网站的组件依赖。
 - 清单创建接口：[Microsoft Graph — Create todoTaskList](https://learn.microsoft.com/en-us/graph/api/todo-post-lists?view=graph-rest-1.0)。

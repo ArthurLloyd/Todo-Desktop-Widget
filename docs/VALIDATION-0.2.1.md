@@ -31,7 +31,7 @@
 
 ## 发布与清理
 
-- 源码提交 `cf7bd1c` 与 `v0.2.1` 标签已推送到现有私有仓库；[正式 Release](https://github.com/ArthurLloyd/Todo-Desktop-Widget-Private/releases/tag/v0.2.1) 已发布，包含 NSIS、MSI 与 SHA256SUMS.txt。
+- 源码提交 `cf7bd1c` 与 `v0.2.1` 标签已推送到当时的私有仓库；[正式 Release](https://github.com/ArthurLloyd/Todo-Desktop-Widget/releases/tag/v0.2.1) 已发布，包含 NSIS、MSI 与 SHA256SUMS.txt。仓库现名为 `Todo-Desktop-Widget`。
 - GitHub 返回的两份安装包 SHA-256 与本地校验清单一致。默认分支的后续文档提交只补充本节交付记录。
 - 自动审批策略阻止了文件删除；约 10 GiB 的构建缓存、测试材料和备份仍保留，另有四个未采用、未提交的错误素材。已生成本地 `CLEANUP-REMAINING.txt`，逐项列出可手动删除的路径与大小；该清单与账户备份未上传 GitHub。正式应用数据与用户已有配置文件保留。
 
